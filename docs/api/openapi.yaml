@@ -1,0 +1,270 @@
+openapi: 3.1.0
+info:
+  title: Scheduler API
+  version: 1.0.0
+  description: >
+    Domain-agnostic scheduling. A requester discovers free slots on a resource
+    and reserves one. All timestamps are RFC 3339 with an explicit offset.
+    All intervals are half-open [starts_at, ends_at).
+    See docs/product/glossary.md for the domain vocabulary.
+servers:
+  - url: http://localhost:8080/v1
+    description: Local
+
+tags:
+  - name: availability
+  - name: bookings
+  - name: resources
+
+paths:
+  /resources/{resource_id}/availability:
+    get:
+      tags: [availability]
+      summary: List bookable slots for a resource in a window
+      operationId: listAvailability
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: starts_at
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+          example: '2026-11-16T00:00:00-08:00'
+        - name: ends_at
+          in: query
+          required: true
+          description: Exclusive. Must be after starts_at; window capped at 60 days.
+          schema: { type: string, format: date-time }
+          example: '2026-11-21T00:00:00-08:00'
+        - name: service_id
+          in: query
+          description: Defaults to the resource's default service.
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Slots in ascending order. May be empty.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [resource_id, service_id, timezone, slots]
+                properties:
+                  resource_id: { type: string, format: uuid }
+                  service_id: { type: string, format: uuid }
+                  timezone: { type: string, example: America/Los_Angeles }
+                  slots:
+                    type: array
+                    items: { $ref: '#/components/schemas/Slot' }
+              example:
+                resource_id: 7b1f...
+                service_id: 2c9e...
+                timezone: America/Los_Angeles
+                slots:
+                  - starts_at: '2026-11-16T08:00:00-08:00'
+                    ends_at:   '2026-11-16T08:30:00-08:00'
+                  - starts_at: '2026-11-16T08:30:00-08:00'
+                    ends_at:   '2026-11-16T09:00:00-08:00'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /bookings:
+    post:
+      tags: [bookings]
+      summary: Create a booking
+      operationId: createBooking
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBookingRequest' }
+            example:
+              resource_id: 7b1f...
+              requester_id: 4d20...
+              starts_at: '2026-11-16T10:00:00-08:00'
+              ends_at:   '2026-11-16T10:30:00-08:00'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '200':
+          description: Idempotent replay — the booking already created with this key.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The slot is already taken for this resource.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              example:
+                type: 'https://errors.example.com/slot_unavailable'
+                title: Slot unavailable
+                status: 409
+                code: slot_unavailable
+                detail: Another booking already occupies this interval.
+        '422':
+          description: >
+            Well-formed but violates a scheduling rule. `code` is one of
+            outside_business_hours, misaligned_start, invalid_duration,
+            starts_in_past, window_too_large, missing_timezone_offset.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /resources/{resource_id}/bookings:
+    get:
+      tags: [bookings]
+      summary: List a resource's bookings
+      operationId: listResourceBookings
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: starts_at
+          in: query
+          schema: { type: string, format: date-time }
+        - name: ends_at
+          in: query
+          schema: { type: string, format: date-time }
+        - name: status
+          in: query
+          schema: { type: string, enum: [confirmed, cancelled] }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Bookings in ascending start order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bookings]
+                properties:
+                  bookings:
+                    type: array
+                    items: { $ref: '#/components/schemas/Booking' }
+                  next_cursor:
+                    type: [string, 'null']
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /bookings/{booking_id}:
+    get:
+      tags: [bookings]
+      summary: Fetch one booking
+      operationId: getBooking
+      parameters:
+        - name: booking_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+          description: OK
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  parameters:
+    ResourceId:
+      name: resource_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Client-generated. A repeat with the same key returns the original booking.
+      schema: { type: string, maxLength: 255 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+
+  responses:
+    BadRequest:
+      description: Malformed request or parameters.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: No such resource.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Slot:
+      type: object
+      required: [starts_at, ends_at]
+      properties:
+        starts_at: { type: string, format: date-time }
+        ends_at:   { type: string, format: date-time }
+
+    CreateBookingRequest:
+      type: object
+      required: [resource_id, requester_id, starts_at, ends_at]
+      properties:
+        resource_id:  { type: string, format: uuid }
+        requester_id: { type: string, format: uuid }
+        service_id:
+          type: string
+          format: uuid
+          description: Defaults to the resource's default service.
+        starts_at: { type: string, format: date-time }
+        ends_at:   { type: string, format: date-time }
+        meeting_url:
+          type: [string, 'null']
+          format: uri
+          description: Supplied by the caller. This service does not provision meetings.
+        metadata:
+          type: object
+          additionalProperties: true
+
+    Booking:
+      type: object
+      required: [id, resource_id, requester_id, service_id, starts_at, ends_at, status, created_at]
+      properties:
+        id:           { type: string, format: uuid }
+        resource_id:  { type: string, format: uuid }
+        requester_id: { type: string, format: uuid }
+        service_id:   { type: string, format: uuid }
+        starts_at:    { type: string, format: date-time }
+        ends_at:      { type: string, format: date-time }
+        status:       { type: string, enum: [confirmed, cancelled] }
+        meeting_url:  { type: [string, 'null'], format: uri }
+        metadata:     { type: object, additionalProperties: true }
+        created_at:   { type: string, format: date-time }
+        updated_at:   { type: string, format: date-time }
+
+    Problem:
+      description: RFC 9457 problem detail, extended with a stable `code`.
+      type: object
+      required: [title, status, code]
+      properties:
+        type:     { type: string, format: uri }
+        title:    { type: string }
+        status:   { type: integer }
+        detail:   { type: string }
+        instance: { type: string }
+        code:
+          type: string
+          description: Stable machine-readable identifier. Branch on this, not on `detail`.
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:  { type: string }
+              code:   { type: string }
+              detail: { type: string }

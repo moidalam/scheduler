@@ -1,0 +1,21 @@
+# Build output
+/bin/
+/dist/
+*.exe
+
+# Go
+*.test
+*.out
+vendor/
+
+# Env and secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
