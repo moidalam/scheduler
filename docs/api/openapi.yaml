@@ -6,6 +6,8 @@ info:
     Domain-agnostic scheduling. A requester discovers free slots on a resource
     and reserves one. All timestamps are RFC 3339 with an explicit offset.
     All intervals are half-open [starts_at, ends_at).
+    All identifiers are opaque strings — "1" and a UUID are equally valid.
+    Do not parse, order, or do arithmetic on them (ADR-0008).
     See docs/product/glossary.md for the domain vocabulary.
 servers:
   - url: http://localhost:8080/v1
@@ -38,7 +40,7 @@ paths:
         - name: service_id
           in: query
           description: Defaults to the resource's default service.
-          schema: { type: string, format: uuid }
+          schema: { type: string }
       responses:
         '200':
           description: Slots in ascending order. May be empty.
@@ -48,15 +50,15 @@ paths:
                 type: object
                 required: [resource_id, service_id, timezone, slots]
                 properties:
-                  resource_id: { type: string, format: uuid }
-                  service_id: { type: string, format: uuid }
+                  resource_id: { type: string }
+                  service_id: { type: string }
                   timezone: { type: string, example: America/Los_Angeles }
                   slots:
                     type: array
                     items: { $ref: '#/components/schemas/Slot' }
               example:
-                resource_id: 7b1f...
-                service_id: 2c9e...
+                resource_id: '1'
+                service_id: 'default-30m'
                 timezone: America/Los_Angeles
                 slots:
                   - starts_at: '2026-11-16T08:00:00-08:00'
@@ -79,8 +81,8 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/CreateBookingRequest' }
             example:
-              resource_id: 7b1f...
-              requester_id: 4d20...
+              resource_id: '1'
+              requester_id: '42'
               starts_at: '2026-11-16T10:00:00-08:00'
               ends_at:   '2026-11-16T10:30:00-08:00'
       responses:
@@ -160,7 +162,7 @@ paths:
         - name: booking_id
           in: path
           required: true
-          schema: { type: string, format: uuid }
+          schema: { type: string }
       responses:
         '200':
           content:
@@ -175,7 +177,11 @@ components:
       name: resource_id
       in: path
       required: true
-      schema: { type: string, format: uuid }
+      description: >
+        Opaque. Matched against the resource's external_id first, then its
+        internal key — so the trainer_id from the source data works as-is.
+      schema: { type: string, minLength: 1, maxLength: 255 }
+      example: '1'
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -215,11 +221,10 @@ components:
       type: object
       required: [resource_id, requester_id, starts_at, ends_at]
       properties:
-        resource_id:  { type: string, format: uuid }
-        requester_id: { type: string, format: uuid }
+        resource_id:  { type: string }
+        requester_id: { type: string }
         service_id:
           type: string
-          format: uuid
           description: Defaults to the resource's default service.
         starts_at: { type: string, format: date-time }
         ends_at:   { type: string, format: date-time }
@@ -235,10 +240,10 @@ components:
       type: object
       required: [id, resource_id, requester_id, service_id, starts_at, ends_at, status, created_at]
       properties:
-        id:           { type: string, format: uuid }
-        resource_id:  { type: string, format: uuid }
-        requester_id: { type: string, format: uuid }
-        service_id:   { type: string, format: uuid }
+        id:           { type: string }
+        resource_id:  { type: string }
+        requester_id: { type: string }
+        service_id:   { type: string }
         starts_at:    { type: string, format: date-time }
         ends_at:      { type: string, format: date-time }
         status:       { type: string, enum: [confirmed, cancelled] }

@@ -112,7 +112,11 @@ Accepts:
 
 Accepts:
 - The supplied `appointments.json` loads into bookings without mutation of its
-  times, preserving ids so external references stay valid.
+  times.
+- Its integer `id`, `trainer_id`, and `user_id` remain usable against the API
+  verbatim: each is recorded as the entity's public identifier, so a caller
+  holding `trainer_id: 1` can call the endpoints with `1` and needs no lookup
+  table (ADR-0008).
 - The loader is idempotent — running it twice does not duplicate rows.
 - Note: records in the seed file that violate current policy (e.g. the 60-minute
   booking `id: 9`, 13:00–14:00) are loaded as-is and flagged, not rejected. See
