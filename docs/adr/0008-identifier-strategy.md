@@ -1,8 +1,13 @@
 # ADR-0008 — Opaque string identifiers in public APIs, UUID keys internally
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by ADR-0009
 - **Date:** 2026-11-10
 - **Relates to:** ADR-0001, ADR-0006
+- **Amended by:** [ADR-0009](0009-shard-ready-data-model.md) §5 — this ADR
+  specified how a *supplied* identifier is recorded but never said what to mint
+  for an entity created here, which left `bookings.external_id` NULL for every
+  booking created through the API. ADR-0009 fixes that: application-generated,
+  type-prefixed UUIDv7.
 
 ## Context
 

@@ -20,7 +20,8 @@
 | [0005](adr/0005-slots-computed-not-stored.md) | Availability computed on read, not materialised | Accepted |
 | [0006](adr/0006-api-style-and-versioning.md) | REST/JSON, `/v1` path versioning, problem+json errors | Accepted |
 | [0007](adr/0007-go-service-layout.md) | Hexagonal Go layout on `net/http` | Accepted |
-| [0008](adr/0008-identifier-strategy.md) | Opaque string ids in public APIs, UUID keys internally | Accepted |
+| [0008](adr/0008-identifier-strategy.md) | Opaque string ids in public APIs, UUID keys internally | Accepted, amended by 0009 |
+| [0009](adr/0009-shard-ready-data-model.md) | Shard-ready schema from day one, deployed on a single node | Accepted |
 
 New ADRs start from [the template](adr/0000-template.md) and are numbered
 sequentially. An ADR is never edited after acceptance — it is superseded by a

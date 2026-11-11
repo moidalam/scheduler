@@ -153,16 +153,23 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
 
-  /bookings/{booking_id}:
+  /resources/{resource_id}/bookings/{booking_id}:
     get:
       tags: [bookings]
       summary: Fetch one booking
+      description: >
+        Nested under the resource deliberately. resource_id is the distribution
+        key (ADR-0009), so carrying it keeps this lookup on a single node
+        instead of asking every node in the fleet. A flat /bookings/{id} route
+        would not survive sharding.
       operationId: getBooking
       parameters:
+        - $ref: '#/components/parameters/ResourceId'
         - name: booking_id
           in: path
           required: true
-          schema: { type: string }
+          schema: { type: string, minLength: 1, maxLength: 255 }
+          example: bkg_0193a7c5-1f2e-7a3b-9c4d-5e6f7a8b9c0d
       responses:
         '200':
           content:

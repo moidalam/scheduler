@@ -23,6 +23,8 @@ availability · **S3** fix when convenient.
 | [API-9](#api-9--metadata-is-an-unbounded-pii-sink) | `metadata` is an unbounded PII sink | S3 | Open |
 | [API-10](#api-10--availability-queries-are-unbounded-work) | Availability queries are costly to serve | S3 | Mitigated by the window cap |
 | [API-11](#api-11--seed-data-violates-current-policy) | Seed data violates current policy | S3 | Accepted, documented |
+| [API-12](#api-12--the-overlap-invariant-is-unverified-under-sharding) | The overlap invariant is unverified under sharding | S2 | Open — must verify |
+| [API-13](#api-13--requester-centric-reads-are-eventually-consistent) | Requester-centric reads are eventually consistent | S3 | Accepted by design |
 
 ---
 
@@ -173,6 +175,42 @@ which the 30-minute service forbids. **Accepted:** it loads verbatim and is
 reported by the loader rather than rejected (PRD R-3). It still occupies its
 full hour for overlap purposes, so availability stays correct. Open only in the
 sense that the product owner has not confirmed the choice.
+
+## API-12 — The overlap invariant is unverified under sharding
+
+**Severity S2.** ADR-0004 puts the system's one hard invariant in a Postgres
+exclusion constraint. [ADR-0009](../adr/0009-shard-ready-data-model.md) shards
+by `resource_id` precisely so that constraint stays *local* — every booking
+that could conflict with another lives on one node.
+
+The shape is right. What is **not** established is whether a distributed
+Postgres accepts an exclusion constraint on a distributed table at all. Citus
+and Aurora Limitless each restrict which constraint types they propagate, and
+declarative partitioning is understood not to support exclusion constraints on
+a partitioned parent.
+
+If the answer is no, the no-overlap guarantee needs a different mechanism at
+scale — an advisory lock keyed on `resource_id`, or a per-shard serialisable
+transaction — and ADR-0004 and ADR-0009 both need revisiting.
+
+**What to do:** test it. Create a distributed table with the constraint from
+the data model against the actual target platform and version, and attempt two
+concurrent overlapping inserts. This is an afternoon's work and it de-risks the
+entire storage design. Do it before writing the migration, not after.
+
+## API-13 — Requester-centric reads are eventually consistent
+
+**Severity S3, accepted by design.** `bookings_by_requester` is maintained
+through a transactional outbox rather than a cross-shard write, so "all my
+appointments" can lag the authoritative `bookings` rows by seconds.
+
+The alternative — a distributed transaction on every booking — would put
+two-phase commit on the hot write path to serve a secondary read. Not worth it.
+
+**What to do:** make the staleness explicit in the API when that endpoint is
+built (a `generated_at` field), read the authoritative row through
+`/resources/{id}/bookings/{id}` whenever correctness matters, and monitor relay
+lag. Never make a booking decision from this table.
 
 ---
 
