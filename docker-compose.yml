@@ -52,6 +52,10 @@ services:
     ports:
       # Bound to localhost only: the UI is not reachable from the network.
       - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+      # Query APIs the BVTs read (test/bvt): logs, metrics and traces.
+      - "127.0.0.1:${LOKI_PORT:-3100}:3100"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+      - "127.0.0.1:${TEMPO_PORT:-3200}:3200"
     environment:
       # Read-only anonymous access for viewing dashboards. Log in as admin/admin
       # (Grafana's default, local only) to edit.

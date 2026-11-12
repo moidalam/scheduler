@@ -1,4 +1,4 @@
-.PHONY: help corp-ca setup generate sqlc-generate build test test-integration vet dev dev-down dev-logs seed psql clean
+.PHONY: help corp-ca setup generate sqlc-generate build test test-integration vet dev dev-down dev-logs seed psql clean dashboards alerts bvt deploy-marker
 
 GO := go
 
@@ -56,6 +56,11 @@ test-integration: .env ## Integration tests against real Postgres, in Docker
 
 dev: .env ## Start Postgres, the API and the seed loader
 	docker compose up --build
+
+bvt: .env ## Build-verification tests against the running stack (starts it detached first)
+	docker compose up -d --build
+	until curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; do sleep 2; done
+	$(GO) test -tags bvt -count=1 -v ./test/bvt/
 
 dev-down: ## Stop everything (keeps data; add -v to docker compose down to wipe it)
 	docker compose down --remove-orphans
