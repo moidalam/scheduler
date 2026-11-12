@@ -14,24 +14,42 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/moidalam/scheduler/internal/entity"
+	"github.com/moidalam/scheduler/internal/observability"
 	"github.com/moidalam/scheduler/internal/schedule"
 )
 
 // Controller implements the scheduling use cases.
 type Controller struct {
-	store Store
-	now   func() time.Time
-	log   *slog.Logger
+	store  Store
+	now    func() time.Time
+	log    *slog.Logger
+	ops    *observability.OpTracker
+	tracer trace.Tracer
 }
 
-// New builds a Controller. now is injectable so tests control the clock.
-func New(store Store, now func() time.Time, log *slog.Logger) *Controller {
-	return &Controller{store: store, now: now, log: log}
+// New builds a Controller. now is injectable so tests control the clock. Call
+// it after observability.Setup, so the instruments bind to the real providers.
+func New(store Store, now func() time.Time, log *slog.Logger) (*Controller, error) {
+	ops, err := observability.NewOpTracker("controller", "booking")
+	if err != nil {
+		return nil, err
+	}
+	return &Controller{store: store, now: now, log: log, ops: ops,
+		tracer: otel.Tracer(tracerName)}, nil
 }
 
 // ListAvailability returns the bookable slots for a resource in [from, to).
 func (c *Controller) ListAvailability(ctx context.Context, tenantID, resourceID int64, serviceID *int64, from, to time.Time) (*Availability, error) {
+	sc := c.begin(ctx, "ListAvailability")
+	out, err := c.listAvailability(sc.ctx, tenantID, resourceID, serviceID, from, to)
+	return out, sc.end(err)
+}
+
+func (c *Controller) listAvailability(ctx context.Context, tenantID, resourceID int64, serviceID *int64, from, to time.Time) (*Availability, error) {
 	res, err := c.resource(ctx, tenantID, resourceID)
 	if err != nil {
 		return nil, err
@@ -73,7 +91,16 @@ func (c *Controller) ListAvailability(ctx context.Context, tenantID, resourceID 
 
 // CreateBooking books a slot. replay is true when idempotencyKey matched an
 // earlier identical request and the original booking is returned unchanged.
-func (c *Controller) CreateBooking(ctx context.Context, tenantID int64, in CreateBookingInput, idempotencyKey *string) (b entity.Booking, replay bool, err error) {
+func (c *Controller) CreateBooking(ctx context.Context, tenantID int64, in CreateBookingInput, idempotencyKey *string) (entity.Booking, bool, error) {
+	sc := c.begin(ctx, "CreateBooking")
+	b, replay, err := c.createBooking(sc.ctx, tenantID, in, idempotencyKey)
+	if replay {
+		sc.scope.SetTag("outcome", "replay")
+	}
+	return b, replay, sc.end(err)
+}
+
+func (c *Controller) createBooking(ctx context.Context, tenantID int64, in CreateBookingInput, idempotencyKey *string) (b entity.Booking, replay bool, err error) {
 	if idempotencyKey != nil {
 		if *idempotencyKey == "" || len(*idempotencyKey) > 255 {
 			return b, false, badRequest("invalid_idempotency_key", "Idempotency-Key must be 1 to 255 characters")
@@ -150,6 +177,12 @@ func (c *Controller) CreateBooking(ctx context.Context, tenantID int64, in Creat
 
 // GetBooking fetches one booking.
 func (c *Controller) GetBooking(ctx context.Context, tenantID, bookingID int64) (entity.Booking, error) {
+	sc := c.begin(ctx, "GetBooking")
+	b, err := c.getBooking(sc.ctx, tenantID, bookingID)
+	return b, sc.end(err)
+}
+
+func (c *Controller) getBooking(ctx context.Context, tenantID, bookingID int64) (entity.Booking, error) {
 	b, err := c.store.GetBooking(ctx, tenantID, bookingID)
 	if errors.Is(err, entity.ErrNotFound) {
 		return b, notFound("booking_not_found", "no such booking")
@@ -167,6 +200,12 @@ const (
 
 // ListBookings returns a resource's bookings in ascending start order.
 func (c *Controller) ListBookings(ctx context.Context, tenantID int64, in ListBookingsInput) (*BookingPage, error) {
+	sc := c.begin(ctx, "ListBookings")
+	page, err := c.listBookings(sc.ctx, tenantID, in)
+	return page, sc.end(err)
+}
+
+func (c *Controller) listBookings(ctx context.Context, tenantID int64, in ListBookingsInput) (*BookingPage, error) {
 	limit := in.Limit
 	if limit == 0 {
 		limit = defaultPageSize

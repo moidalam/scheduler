@@ -15,6 +15,7 @@ import (
 	"github.com/moidalam/scheduler/internal/controllers"
 	"github.com/moidalam/scheduler/internal/db"
 	"github.com/moidalam/scheduler/internal/handlers"
+	"github.com/moidalam/scheduler/internal/observability"
 )
 
 // Stamped by the Dockerfile via -ldflags "-X main.version=<commit sha>".
@@ -35,11 +36,19 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	logger := newLogger(cfg.LogLevel)
-	slog.SetDefault(logger)
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Telemetry is set up first, so every instrument and tracer below binds to
+	// the real providers. With no OTLP endpoint, logs stay on stdout.
+	logger, shutdownTelemetry, err := observability.Setup(ctx, observability.Config{
+		Endpoint: cfg.OTelEndpoint, ServiceName: "scheduler", ServiceVersion: version, Env: cfg.Env,
+	}, os.Stdout, levelOf(cfg.LogLevel))
+	if err != nil {
+		return err
+	}
+	defer flushTelemetry(shutdownTelemetry)
+	slog.SetDefault(logger)
 
 	// Migrations run at startup, before the pool opens (ADR-0002).
 	if err := db.RunMigrations(ctx, cfg.DatabaseURL, logger); err != nil {
@@ -52,13 +61,24 @@ func run() error {
 	store := db.NewStore(pool)
 	defer store.Close()
 
-	ctl := controllers.New(store, func() time.Time { return time.Now().UTC() }, logger)
+	observed, err := db.NewObservedStore(store, logger)
+	if err != nil {
+		return err
+	}
+	ctl, err := controllers.New(observed, func() time.Time { return time.Now().UTC() }, logger)
+	if err != nil {
+		return err
+	}
+	edge, err := observability.NewOpTracker("handler", "http")
+	if err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr: ":" + cfg.Port,
 		Handler: handlers.NewRouter(handlers.RouterDeps{
 			Handlers: handlers.New(ctl), Tenants: store, DB: store,
-			DefaultTenant: cfg.DefaultTenantID, Log: logger,
+			DefaultTenant: cfg.DefaultTenantID, Log: logger, Metrics: edge,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
@@ -87,8 +107,18 @@ func run() error {
 	return srv.Shutdown(shutdownCtx)
 }
 
-func newLogger(level string) *slog.Logger {
+// flushTelemetry sends buffered spans, metrics and logs before exit. It is
+// bounded, so a dead collector cannot hold up shutdown.
+func flushTelemetry(shutdown func(context.Context) error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := shutdown(ctx); err != nil {
+		slog.Error("telemetry flush failed", slog.Any("error", err))
+	}
+}
+
+func levelOf(name string) slog.Level {
 	var l slog.Level
-	_ = l.UnmarshalText([]byte(level)) // validated in config; falls back to info
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: l}))
+	_ = l.UnmarshalText([]byte(name)) // validated in config; falls back to info
+	return l
 }

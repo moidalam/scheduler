@@ -27,6 +27,7 @@ import (
 	dbgen "github.com/moidalam/scheduler/internal/db/gen"
 	"github.com/moidalam/scheduler/internal/gen/api"
 	"github.com/moidalam/scheduler/internal/handlers"
+	"github.com/moidalam/scheduler/internal/observability"
 	"github.com/moidalam/scheduler/internal/testdb"
 )
 
@@ -38,6 +39,7 @@ type stack struct {
 	pool *pgxpool.Pool
 	ctl  *controllers.Controller
 	http http.Handler
+	logs *bytes.Buffer // every JSON log line the stack wrote
 }
 
 // newStack builds the real application over a fresh database, with two tenants.
@@ -66,18 +68,29 @@ func newStack(t *testing.T) *stack {
 		}
 	}
 
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	// Real telemetry, with no exporter: spans get real ids, and logs go to a buffer.
+	logs := &bytes.Buffer{}
+	log, shutdown, err := observability.Setup(ctx, observability.Config{ServiceName: "scheduler-test"}, logs, slog.LevelDebug)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = shutdown(context.Background()) })
+
 	store := db.NewStore(pool)
-	ctl := controllers.New(store, func() time.Time { return fixedNow }, log)
+	observed, err := db.NewObservedStore(store, log)
+	require.NoError(t, err)
+	ctl, err := controllers.New(observed, func() time.Time { return fixedNow }, log)
+	require.NoError(t, err)
+	edge, err := observability.NewOpTracker("handler", "http")
+	require.NoError(t, err)
 	router := handlers.NewRouter(handlers.RouterDeps{
-		Handlers: handlers.New(ctl), Tenants: store, DB: store, DefaultTenant: 0, Log: log,
+		Handlers: handlers.New(ctl), Tenants: store, DB: store, DefaultTenant: 0, Log: log, Metrics: edge,
 	})
-	return &stack{pool: pool, ctl: ctl, http: router}
+	return &stack{pool: pool, ctl: ctl, http: router, logs: logs}
 }
 
 type resp struct {
 	Status int
 	Body   []byte
+	Header http.Header
 }
 
 func (r resp) json(t *testing.T, v any) {
@@ -112,7 +125,7 @@ func (s *stack) do(t *testing.T, method, path, tenant string, body any, hdr map[
 	}
 	rec := httptest.NewRecorder()
 	s.http.ServeHTTP(rec, req)
-	return resp{Status: rec.Code, Body: rec.Body.Bytes()}
+	return resp{Status: rec.Code, Body: rec.Body.Bytes(), Header: rec.Header()}
 }
 
 func mondayWindow() string {

@@ -8,8 +8,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/moidalam/scheduler/internal/gen/api"
+	"github.com/moidalam/scheduler/internal/observability"
 )
 
 // Pinger reports whether the database is reachable.
@@ -24,14 +26,15 @@ type RouterDeps struct {
 	DB            Pinger
 	DefaultTenant int64
 	Log           *slog.Logger
+	// Metrics records one operation per request at the edge.
+	Metrics *observability.OpTracker
 }
 
 // NewRouter builds the HTTP handler: health at /healthz, the generated API
 // under /v1 behind the tenant middleware.
 func NewRouter(d RouterDeps) http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Use(requestLogger(d.Log))
+	r.Use(observeRequests(d.Log, d.Metrics))
 	r.Use(middleware.Recoverer)
 
 	r.Get("/healthz", func(w http.ResponseWriter, req *http.Request) {
@@ -50,30 +53,14 @@ func NewRouter(d RouterDeps) http.Handler {
 		ResponseErrorHandlerFunc: responseErrorHandler(d.Log),
 	})
 	r.Group(func(r chi.Router) {
-		r.Use(TenantMiddleware(d.Tenants, d.DefaultTenant))
+		r.Use(TenantMiddleware(d.Tenants, d.DefaultTenant, d.Log))
 		api.HandlerWithOptions(strict, api.ChiServerOptions{
 			BaseRouter:       r,
 			ErrorHandlerFunc: requestErrorHandler,
 		})
 	})
-	return r
-}
-
-// requestLogger writes one structured line per request, carrying the request id
-// so a log line can be tied to a response.
-func requestLogger(log *slog.Logger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
-			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-			next.ServeHTTP(ww, r)
-			log.InfoContext(r.Context(), "request",
-				slog.String("request_id", middleware.GetReqID(r.Context())),
-				slog.String("method", r.Method),
-				slog.String("path", r.URL.Path),
-				slog.Int("status", ww.Status()),
-				slog.Int64("duration_ms", time.Since(start).Milliseconds()),
-			)
-		})
-	}
+	// The outermost layer opens the request's trace span, so the edge and every
+	// layer below it log and measure inside that one trace. It also accepts an
+	// incoming traceparent header from the caller.
+	return otelhttp.NewHandler(r, "scheduler")
 }

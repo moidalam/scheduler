@@ -10,6 +10,7 @@ import (
 	"github.com/moidalam/scheduler/internal/controllers"
 	"github.com/moidalam/scheduler/internal/entity"
 	"github.com/moidalam/scheduler/internal/gen/api"
+	"github.com/moidalam/scheduler/internal/observability"
 )
 
 // Handlers implements api.StrictServerInterface.
@@ -23,6 +24,7 @@ func New(c *controllers.Controller) *Handlers { return &Handlers{c: c} }
 var _ api.StrictServerInterface = (*Handlers)(nil)
 
 func (h *Handlers) ListAvailability(ctx context.Context, req api.ListAvailabilityRequestObject) (api.ListAvailabilityResponseObject, error) {
+	observability.SetOp(ctx, "ListAvailability")
 	a, err := h.c.ListAvailability(ctx, TenantFrom(ctx), req.ResourceId, req.Params.ServiceId, req.Params.StartsAt, req.Params.EndsAt)
 	if err != nil {
 		return nil, err
@@ -37,6 +39,7 @@ func (h *Handlers) ListAvailability(ctx context.Context, req api.ListAvailabilit
 }
 
 func (h *Handlers) CreateBooking(ctx context.Context, req api.CreateBookingRequestObject) (api.CreateBookingResponseObject, error) {
+	observability.SetOp(ctx, "CreateBooking")
 	if req.Body == nil {
 		return nil, &controllers.Error{Status: http.StatusBadRequest, Code: "invalid_request", Detail: "a JSON request body is required"}
 	}
@@ -59,6 +62,7 @@ func (h *Handlers) CreateBooking(ctx context.Context, req api.CreateBookingReque
 }
 
 func (h *Handlers) GetBooking(ctx context.Context, req api.GetBookingRequestObject) (api.GetBookingResponseObject, error) {
+	observability.SetOp(ctx, "GetBooking")
 	b, err := h.c.GetBooking(ctx, TenantFrom(ctx), req.BookingId)
 	if err != nil {
 		return nil, err
@@ -67,6 +71,7 @@ func (h *Handlers) GetBooking(ctx context.Context, req api.GetBookingRequestObje
 }
 
 func (h *Handlers) ListResourceBookings(ctx context.Context, req api.ListResourceBookingsRequestObject) (api.ListResourceBookingsResponseObject, error) {
+	observability.SetOp(ctx, "ListBookings")
 	in := controllers.ListBookingsInput{
 		ResourceID: req.ResourceId, From: req.Params.StartsAt, To: req.Params.EndsAt, Cursor: req.Params.Cursor,
 	}

@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -26,7 +28,7 @@ func (f fakeTenants) GetTenant(_ context.Context, id int64) (entity.Tenant, erro
 // tenant the downstream handler saw.
 func serve(t *testing.T, tenants TenantLookup, defaultTenant int64, header string) (status int, seen int64) {
 	t.Helper()
-	h := TenantMiddleware(tenants, defaultTenant)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	h := TenantMiddleware(tenants, defaultTenant, slog.New(slog.NewTextHandler(io.Discard, nil)))(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		seen = TenantFrom(r.Context())
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/v1/anything", nil)

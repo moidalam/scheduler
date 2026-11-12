@@ -3,10 +3,12 @@ package handlers
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/moidalam/scheduler/internal/entity"
+	"github.com/moidalam/scheduler/internal/observability"
 )
 
 // TenantHeader carries the tenant a request is scoped to (ADR-0009).
@@ -33,37 +35,50 @@ type TenantLookup interface {
 // The header is caller-asserted, not authenticated. This is routing, not tenant
 // isolation (known-issues API-8). defaultTenant, when non-zero, is used if the
 // header is absent; otherwise a missing header is a 400.
-func TenantMiddleware(lookup TenantLookup, defaultTenant int64) func(http.Handler) http.Handler {
+func TenantMiddleware(lookup TenantLookup, defaultTenant int64, log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			id := defaultTenant
 			if raw := r.Header.Get(TenantHeader); raw != "" {
 				parsed, err := strconv.ParseInt(raw, 10, 64)
 				if err != nil || parsed < 1 {
-					writeProblem(w, http.StatusBadRequest, "missing_tenant", TenantHeader+" must be a positive integer")
+					tenantFailure(w, r, http.StatusBadRequest, "missing_tenant", TenantHeader+" must be a positive integer")
 					return
 				}
 				id = parsed
 			}
 			if id == 0 {
-				writeProblem(w, http.StatusBadRequest, "missing_tenant", TenantHeader+" header is required")
+				tenantFailure(w, r, http.StatusBadRequest, "missing_tenant", TenantHeader+" header is required")
 				return
 			}
 
 			t, err := lookup.GetTenant(r.Context(), id)
 			if errors.Is(err, entity.ErrNotFound) {
-				writeProblem(w, http.StatusNotFound, "unknown_tenant", "no such tenant")
+				tenantFailure(w, r, http.StatusNotFound, "unknown_tenant", "no such tenant")
 				return
 			}
 			if err != nil {
-				writeProblem(w, http.StatusInternalServerError, "internal_error", "an unexpected error occurred")
+				// The tenant lookup bypasses the observed store, so this is its origin.
+				log.ErrorContext(r.Context(), "tenant lookup failed", slog.Any("error", err))
+				setErrorCode(r, "internal_error")
+				tenantFailure(w, r, http.StatusInternalServerError, "internal_error", "an unexpected error occurred")
 				return
 			}
 			if t.Status != "active" {
-				writeProblem(w, http.StatusForbidden, "tenant_suspended", "this tenant is suspended")
+				tenantFailure(w, r, http.StatusForbidden, "tenant_suspended", "this tenant is suspended")
 				return
+			}
+			if rec := observability.RecordFrom(r.Context()); rec != nil {
+				rec.TenantID = id
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), tenantKey{}, id)))
 		})
 	}
+}
+
+// tenantFailure answers a request the tenant middleware refuses, and records
+// the code on the request record for the edge line and metric.
+func tenantFailure(w http.ResponseWriter, r *http.Request, status int, code, detail string) {
+	setErrorCode(r, code)
+	writeProblem(w, status, code, detail)
 }

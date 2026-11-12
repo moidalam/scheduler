@@ -25,6 +25,9 @@ type Config struct {
 	DefaultTenantID int64
 	// LogLevel is debug, info, warn or error. Env: LOG_LEVEL. Default: "info".
 	LogLevel string
+	// OTelEndpoint is the OTLP/HTTP base URL logs, metrics and traces are sent
+	// to. Empty keeps telemetry local (stdout only). Env: OTEL_EXPORTER_OTLP_ENDPOINT.
+	OTelEndpoint string
 }
 
 // Load reads configuration once at process startup.
@@ -46,6 +49,7 @@ func Load() (*Config, error) {
 		DatabaseURL:     v.GetString("database_url"),
 		DefaultTenantID: v.GetInt64("default_tenant_id"),
 		LogLevel:        strings.ToLower(v.GetString("log_level")),
+		OTelEndpoint:    v.GetString("otel_exporter_otlp_endpoint"),
 	}
 	return cfg, cfg.Validate()
 }
