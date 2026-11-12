@@ -19,3 +19,7 @@ vendor/
 .DS_Store
 .idea/
 .vscode/
+
+# Corporate TLS-inspection CAs for the Docker build (see certs/README.md)
+certs/*.crt
+certs/*.pem

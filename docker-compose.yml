@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: scheduler
+      POSTGRES_USER: scheduler
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copy .env.example to .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scheduler -d scheduler"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      target: prod
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      APP_ENV: local
+      PORT: "8080"
+      DATABASE_URL: postgres://scheduler:${POSTGRES_PASSWORD}@postgres:5432/scheduler?sslmode=disable
+      # Local convenience (ADR-0009): lets plain curl work without X-Tenant-ID.
+      # Leave this unset anywhere real, so a missing header fails closed.
+      DEFAULT_TENANT_ID: "1"
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+
+  # One-shot: loads data/appointments.seed.json into tenant 1, then exits.
+  # Idempotent, so `docker compose up` can be run repeatedly.
+  seed:
+    build:
+      context: .
+      target: prod
+    command: ["./seed", "-file", "/app/data/appointments.seed.json"]
+    environment:
+      DATABASE_URL: postgres://scheduler:${POSTGRES_PASSWORD}@postgres:5432/scheduler?sslmode=disable
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: "no"
+
+  # Integration tests: `make test-integration`. Each test gets its own throwaway
+  # database on the postgres service, created and dropped by the test.
+  test:
+    profiles: ["test"]
+    build:
+      context: .
+      target: test
+    environment:
+      TEST_DATABASE_URL: postgres://scheduler:${POSTGRES_PASSWORD}@postgres:5432/postgres?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
