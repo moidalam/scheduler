@@ -70,6 +70,9 @@ deploy-marker: ## Mark a deployment on the dashboards (VERSION defaults to the c
 dashboards: ## Regenerate the Grafana dashboards from deploy/grafana/build_dashboard.py
 	$(PYTHON) deploy/grafana/build_dashboard.py
 
+alerts: ## Regenerate the Grafana alert rules from deploy/grafana/build_alerts.py
+	$(PYTHON) deploy/grafana/build_alerts.py
+
 bvt: .env ## Build-verification tests against the running stack (starts it detached first)
 	docker compose up -d --build
 	until curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; do sleep 2; done
