@@ -23,9 +23,10 @@ const (
 
 const meterName = "github.com/moidalam/scheduler/internal/observability"
 
-// durationBucketsMS are in milliseconds, sized for an API whose responses take
-// tens to hundreds of milliseconds. Percentile precision is set by these edges.
-var durationBucketsMS = []float64{1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000}
+// durationBucketsMS are in milliseconds. The sub-millisecond edges keep p50 and
+// p95 meaningful on a fast local stack, where most operations take well under a
+// millisecond. Percentile precision is set by these edges.
+var durationBucketsMS = []float64{0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000}
 
 // OpTracker emits operation.total (counter) and operation.duration_ms
 // (histogram), labelled with the layer, component and op. One tracker is made
