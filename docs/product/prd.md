@@ -113,14 +113,12 @@ Accepts:
 Accepts:
 - The supplied `appointments.json` loads into bookings without mutation of its
   times.
-- Its integer `id`, `trainer_id`, and `user_id` remain usable against the API
-  verbatim: each is recorded as the entity's public identifier, so a caller
-  holding `trainer_id: 1` can call the endpoints with `1` and needs no lookup
-  table (ADR-0008).
+- Its integer `id`, `trainer_id`, and `user_id` become the real identifiers of
+  the booking, resource, and requester in a default tenant `1`, so a caller
+  holding `trainer_id: 1` can call the endpoints with `1` (ADR-0008).
 - The loader is idempotent — running it twice does not duplicate rows.
-- Note: records in the seed file that violate current policy (e.g. the 60-minute
-  booking `id: 9`, 13:00–14:00) are loaded as-is and flagged, not rejected. See
-  §9/R-3.
+- Records in the seed file that violate current policy are loaded as-is and
+  reported by the loader, not rejected. Five of the ten do: see §9/R-3.
 
 ## 7. Business rules (v1 defaults, all configurable)
 
@@ -150,17 +148,25 @@ To avoid a breaking change later, v1 already carries:
   cases on both US transition days.
 - **R-2 — Concurrency.** Application-level "check then insert" is not safe.
   Mitigation: a database exclusion constraint. See ADR-0004.
-- **R-3 — Dirty seed data.** The supplied file contains a 60-minute booking,
-  which the 30-minute rule forbids. Assumption taken: history is immutable and
-  loaded verbatim; policy applies to new bookings only. **Open:** confirm with
-  the product owner that this is preferred over normalising or dropping it.
-- **R-4 — Identity.** `requester_id` and `resource_id` are opaque references to
-  entities this service does not own. **Open:** do we validate them against an
-  external identity service, or trust the caller in v1? Current assumption:
-  trust, and record.
+- **R-3 — Dirty seed data.** Five of the ten supplied appointments break the
+  current rules. Records 5, 7, 8, 9 and 10 are all on Saturday 2019-01-26, outside
+  the Monday–Friday window, and record 9 is also sixty minutes where the rule is
+  thirty. Assumption taken: history is immutable and loaded verbatim; policy
+  applies to new bookings only. **Open:** confirm with the product owner that
+  this is preferred over normalising or dropping them, or whether Saturday is
+  meant to be bookable.
+- **R-4 — Identity.** This service owns a `requesters` table, so a booking's
+  requester must exist in the tenant; the foreign key enforces it. Who is
+  *allowed* to act as a given requester is not enforced (see known-issues
+  API-3). `requesters.external_ref` holds the id in any upstream identity system.
 - **R-5 — Who may book whom.** v1 does not model a client↔trainer relationship,
   so any requester may book any resource. **Open:** is an eligibility check
   required before launch?
+
+- **R-6 — Tenancy.** Every request is scoped to a tenant read from the
+  `X-Tenant-ID` header (ADR-0009). The header is unauthenticated, so this is
+  routing, not isolation (known-issues API-8). A very large tenant cannot be
+  split across nodes (API-14). **Open:** confirm tenants are many and bounded.
 
 ## 10. Success measures
 

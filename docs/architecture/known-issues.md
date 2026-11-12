@@ -1,226 +1,159 @@
 # API Risk & Known-Issue Register
 
-Status: Open · Owner: Moid Alam · Last updated: 2026-11-10
+Status: Open · Owner: Moid Alam · Last updated: 2026-11-12
 
-Every issue below is a property of the **current specification**, not a bug
-found in code — there is no code yet. The point of writing them down now is that
-each one is cheap to fix on paper and expensive to fix after launch.
+Every issue below is a property of the **current design**, recorded so each is
+a decision made knowingly rather than discovered later. Much of it is hardening
+beyond what the original brief asks for; the brief specifies no authentication,
+so most of these are consequences of that, not defects in the exercise.
 
-Severity is about impact if the service shipped as currently specified:
-**S1** must be fixed before any real traffic · **S2** fix before general
-availability · **S3** fix when convenient.
+Severity is about impact if the service shipped as it stands: **S1** must be
+fixed before any real traffic · **S2** before general availability · **S3** when
+convenient.
 
 | # | Issue | Severity | Status |
 |---|---|---|---|
-| [API-1](#api-1--no-authentication-or-authorization-anywhere) | No authentication or authorization anywhere | S1 | Open |
-| [API-2](#api-2--identifiers-are-guessable) | Identifiers are guessable | S2 | Open — partially mitigated |
-| [API-3](#api-3--requester_id-is-caller-asserted) | `requester_id` is caller-asserted and spoofable | S1 | Open |
-| [API-4](#api-4--no-eligibility-model) | Any requester may book any resource | S2 | Open |
-| [API-5](#api-5--availability-discloses-a-full-schedule) | Availability discloses a resource's working pattern | S2 | Open |
-| [API-6](#api-6--no-rate-limiting-or-abuse-controls) | No rate limiting or abuse controls | S2 | Open |
-| [API-7](#api-7--no-audit-trail) | No audit trail on writes | S3 | Open |
-| [API-8](#api-8--tenancy-is-modelled-but-not-enforced) | Tenancy is modelled but not enforced | S2 | Open |
-| [API-9](#api-9--metadata-is-an-unbounded-pii-sink) | `metadata` is an unbounded PII sink | S3 | Open |
-| [API-10](#api-10--availability-queries-are-unbounded-work) | Availability queries are costly to serve | S3 | Mitigated by the window cap |
-| [API-11](#api-11--seed-data-violates-current-policy) | Seed data violates current policy | S3 | Accepted, documented |
-| [API-12](#api-12--the-overlap-invariant-is-unverified-under-sharding) | The overlap invariant is unverified under sharding | S2 | Open — must verify |
-| [API-13](#api-13--requester-centric-reads-are-eventually-consistent) | Requester-centric reads are eventually consistent | S3 | Accepted by design |
+| API-1 | No authentication or authorization | S1 | Open |
+| API-2 | Integer ids are guessable | S3 | Accepted — tenant-scoped |
+| API-3 | `requester_id` is caller-asserted | S1 | Open |
+| API-4 | Any requester may book any resource | S2 | Open |
+| API-5 | Availability discloses a working pattern | S2 | Open |
+| API-6 | No rate limiting or abuse controls | S2 | Open |
+| API-7 | Audit trail is minimal | S3 | Partly addressed |
+| API-8 | Tenant comes from an unauthenticated header | S1 | Open |
+| API-9 | `metadata` is an unbounded PII sink | S3 | Open |
+| API-10 | Availability queries are costly to serve | S3 | Mitigated by the window cap |
+| API-11 | Seed data violates current policy | S3 | Accepted |
+| API-12 | Overlap constraint unverified under sharding | S2 | Open — must verify |
+| API-13 | Identity sequences assume a single allocator | S2 | Open — must verify |
+| API-14 | A very large tenant cannot be split | S3 | Accepted by design |
 
 ---
 
-## API-1 — No authentication or authorization anywhere
+## API-1 — No authentication or authorization
 
-**Severity S1.** The OpenAPI contract defines no `securitySchemes`. Every
-endpoint is effectively public: anyone who can reach the service can read any
-resource's schedule and create bookings against it.
+**S1.** The contract defines no security scheme. Anyone who can reach the service
+can read any resource's schedule and create bookings. This is the root issue:
+API-3, API-5 and API-8 are only exploitable because of it.
 
-This is the root issue, and it is the one that makes API-2, API-3, and API-4
-exploitable rather than theoretical. Guessable ids do not matter much when
-every request is authenticated and authorized; they matter enormously when
-nothing is.
+**To do:** add bearer-token authentication, define the principal model
+(requester, resource owner, back-office service), and hang authorization rules
+off it. Needs its own ADR before implementation.
 
-**What to do:** add a `securitySchemes` entry (OAuth 2.0 bearer tokens or signed
-service-to-service JWTs), mark every operation as requiring it, and define the
-principal model — is the caller a requester acting for themselves, a resource
-owner, or a back-office service acting on behalf of either? Authorization rules
-then hang off that principal. This needs a decision record of its own before
-implementation.
+## API-2 — Integer ids are guessable
 
-## API-2 — Identifiers are guessable
+**S3, accepted.** Ids are small sequential integers, matching the supplied data
+and the brief's endpoints. Within a tenant, anyone who can reach the API can
+enumerate trainers and requesters by counting.
 
-**Severity S2.** The supplied data identifies trainers and users by small
-sequential integers (`trainer_id: 1`, `user_id: 3`), and ADR-0008 makes those
-integers the public identifiers so the existing data keeps working.
+This is proportionate for the exercise. Ids are unique only within a tenant
+(`(7, 3)` is not `(1, 3)`), so a caller in one tenant gets a 404 for another's
+ids once the tenant is authenticated. Who may see which resource *within* a
+tenant is an authorization rule, and non-guessable ids would not replace it.
+Sequential ids also reveal rough volume.
 
-Consequences, assuming no authorization (API-1):
-
-- **Enumeration.** `GET /v1/resources/1/availability`,
-  `/2`, `/3`… walks the entire roster of trainers and their working patterns.
-- **Inference of volume.** Sequential ids disclose roughly how many trainers
-  and clients exist, and how fast they are being added — commercially sensitive.
-- **Correlation.** A booking returns its `requester_id`. Small integers make it
-  trivial to correlate activity across bookings and build a profile of an
-  individual's appointment history.
-
-**Partially mitigated, deliberately.** ADR-0008 made public ids *opaque
-strings* rather than integers specifically so this can be fixed without a
-breaking API change: clients are contractually forbidden from parsing ids, and
-the `external_id` column means an entity's public id can be rotated to a UUID
-while its internal key and all its history stay put.
-
-**What to do, in order:**
-
-1. Fix API-1. Authorization is the actual control; unguessable ids are defence
-   in depth, not a substitute. An attacker who can enumerate is an attacker who
-   should not have been answered at all.
-2. Issue UUIDv4 (or ULID) `external_id` values to all **new** entities, so the
-   integers become a legacy tail that shrinks rather than a growing surface.
-3. Decide on the existing integers. Rotating them to UUIDs is a one-row-per-
-   entity update here, but it breaks any caller still holding `1`. Options are
-   a dual-read window where both the old integer and the new UUID resolve, or a
-   hard cutover coordinated with the single known consumer. Favour the dual-read
-   window; the `external_id` design already supports it if the column becomes a
-   one-to-many `external_ids` table.
-
-**Note on scope:** this cannot be fixed by changing the `requester_id` type
-alone. That value is minted by whatever system owns users; making it a UUID here
-requires that system to supply one.
+**To do:** nothing now. If the public surface grows, add an opaque public id
+column rather than changing keys.
 
 ## API-3 — `requester_id` is caller-asserted
 
-**Severity S1.** `POST /v1/bookings` takes `requester_id` in the request body
-and the service records it as given (PRD R-4: "trust, and record"). Nothing ties
-it to the authenticated caller, because there is no authenticated caller.
+**S1.** `POST /v1/bookings` takes `requester_id` in the body and records it. Any
+client can book on anyone's behalf.
 
-So any client can book on anyone's behalf, cancel the appearance of someone
-else's intent, or fill a trainer's calendar under fabricated identities.
-
-**What to do:** once API-1 lands, derive `requester_id` from the authenticated
-principal for self-service callers and reject it in the body. Keep it as an
-explicit field only for trusted back-office principals holding a
-`book-on-behalf-of` scope, and record both the subject and the actor.
+**To do:** once API-1 lands, derive it from the authenticated principal for
+self-service callers and reject it in the body; keep it explicit only for
+trusted back-office principals.
 
 ## API-4 — No eligibility model
 
-**Severity S2.** There is no relationship between a requester and a resource,
-so any requester may book any trainer. Already tracked as PRD R-5; repeated
-here because its security consequence is distinct from its product consequence.
+**S2.** Any requester may book any resource. There is no client↔trainer
+relationship (PRD R-5).
 
-**What to do:** decide whether booking requires an existing relationship. If so,
-model it (a `resource_requesters` table or an external entitlement check) and
-make the check part of booking validation, returning `403`.
+**To do:** decide whether booking requires an existing relationship; if so,
+model it and return `403` when absent.
 
-## API-5 — Availability discloses a full schedule
+## API-5 — Availability discloses a working pattern
 
-**Severity S2.** The availability endpoint returns every free slot, from which
-every **busy** slot is directly inferable by subtracting from the published
-business hours. That is an individual's working pattern — when they are at
-work, when they took an afternoon off — exposed to any caller.
+**S2.** The endpoint returns every free slot, from which every busy slot is
+inferable. That exposes when someone is working or off.
 
-**What to do:** treat availability as authorized data, not public data (API-1).
-Consider also returning only a bounded number of slots and suppressing the
-distinction between "outside hours" and "booked" where the caller has no
-relationship with the resource.
+**To do:** treat availability as authorized data once API-1 lands.
 
 ## API-6 — No rate limiting or abuse controls
 
-**Severity S2.** Nothing limits booking creation. A single caller can exhaust a
-trainer's entire calendar in one loop — a denial-of-service against the
-business, not the servers. Nothing limits availability queries either, which are
-the most expensive reads (ADR-0005).
+**S2.** A single caller can fill a trainer's calendar in a loop — a denial of
+service against the business. Availability reads are the most expensive.
 
-**What to do:** per-principal rate limits on writes; a cap on concurrent future
-bookings per requester per resource; `429` with `Retry-After` in the contract.
+**To do:** per-principal limits on writes, a cap on concurrent future bookings
+per requester, and `429` with `Retry-After`.
 
-## API-7 — No audit trail
+## API-7 — Audit trail is minimal
 
-**Severity S3.** Bookings carry `created_at`/`updated_at` but no record of
-*who* acted. With cancellation arriving in v1.1 as a status transition, "who
-cancelled this and when" will be unanswerable.
+**S3, partly addressed.** `booking_events` records every write in the same
+transaction, but the `actor` is whatever the caller says until authentication
+exists.
 
-**What to do:** an append-only `booking_events` table (`booking_id`, `actor`,
-`action`, `at`, `payload`) written in the same transaction as the change.
+## API-8 — Tenant comes from an unauthenticated header
 
-## API-8 — Tenancy is modelled but not enforced
+**S1.** ADR-0009. Anyone can send `X-Tenant-ID: 2` and read tenant 2's data.
+This is not tenant isolation.
 
-**Severity S2.** `tenant_id` is on every table, but no query in the spec is
-scoped by it and no request carries a tenant. A single forgotten `WHERE` leaks
-one customer's schedule to another.
-
-**What to do:** derive the tenant from the authenticated principal, never from
-the request body; enforce with Postgres row-level security so the isolation does
-not depend on every query being written correctly.
+**To do:** derive the tenant from the authenticated principal, never from a
+request header, and enforce it with Postgres row-level security so isolation
+does not depend on every query being correct.
 
 ## API-9 — `metadata` is an unbounded PII sink
 
-**Severity S3.** `metadata jsonb` on resources and bookings accepts anything.
-Callers will put health notes, phone numbers, and session details in it, and the
-service has no retention policy, no size limit, and no idea it is holding
-sensitive data.
+**S3.** `metadata jsonb` accepts anything. Callers will put health notes and
+phone numbers in it, with no size limit or retention policy.
 
-**What to do:** cap the document size, document that `metadata` must not carry
-personal or special-category data, and — if it must — classify the field and
-bring it under a retention policy before launch.
+**To do:** cap the size and document that it must not carry personal data.
 
-## API-10 — Availability queries are unbounded work
+## API-10 — Availability queries are costly to serve
 
-**Severity S3.** Slot generation is proportional to window size (ADR-0005).
-**Mitigated:** the window is capped at 60 days and over-cap requests are
-rejected with `400`. Listed so the mitigation is not quietly removed later.
+**S3, mitigated.** Slot generation is proportional to window size. The window is
+capped at 60 days and over-cap requests return `400`. Listed so the mitigation
+is not quietly removed.
 
 ## API-11 — Seed data violates current policy
 
-**Severity S3.** `appointments.json` record `id: 9` is a 60-minute booking,
-which the 30-minute service forbids. **Accepted:** it loads verbatim and is
-reported by the loader rather than rejected (PRD R-3). It still occupies its
-full hour for overlap purposes, so availability stays correct. Open only in the
-sense that the product owner has not confirmed the choice.
+**S3, accepted.** Five of the ten seed bookings break current policy: 5, 7, 8, 9
+and 10 are on a Saturday, and 9 is also sixty minutes against a thirty-minute
+service. They load verbatim and are reported rather than rejected (PRD R-3).
 
-## API-12 — The overlap invariant is unverified under sharding
+## API-12 — Overlap constraint unverified under sharding
 
-**Severity S2.** ADR-0004 puts the system's one hard invariant in a Postgres
-exclusion constraint. [ADR-0009](../adr/0009-shard-ready-data-model.md) shards
-by `resource_id` precisely so that constraint stays *local* — every booking
-that could conflict with another lives on one node.
+**S2.** ADR-0004 rests on an exclusion constraint. With `tenant_id` leading, it
+is correctly shaped to stay local to one shard. Whether a distributed Postgres
+**accepts an exclusion constraint on a distributed table** is not established.
+Citus and Aurora Limitless each restrict which constraint types they propagate,
+and declarative partitioning is understood not to support exclusion constraints
+on a partitioned parent.
 
-The shape is right. What is **not** established is whether a distributed
-Postgres accepts an exclusion constraint on a distributed table at all. Citus
-and Aurora Limitless each restrict which constraint types they propagate, and
-declarative partitioning is understood not to support exclusion constraints on
-a partitioned parent.
+**To do:** before any sharded deployment, create the constraint on the target
+platform and attempt two concurrent overlapping inserts. If it is refused, the
+no-overlap guarantee needs an advisory lock keyed on `(tenant_id, resource_id)`
+and ADR-0004 and ADR-0008 need revisiting.
 
-If the answer is no, the no-overlap guarantee needs a different mechanism at
-scale — an advisory lock keyed on `resource_id`, or a per-shard serialisable
-transaction — and ADR-0004 and ADR-0009 both need revisiting.
+## API-13 — Identity sequences assume a single allocator
 
-**What to do:** test it. Create a distributed table with the constraint from
-the data model against the actual target platform and version, and attempt two
-concurrent overlapping inserts. This is an afternoon's work and it de-risks the
-entire storage design. Do it before writing the migration, not after.
+**S2.** When a tenant moves between nodes that each run their own sequence, new
+ids can collide with the moved rows. Safe while one coordinator allocates ids.
 
-## API-13 — Requester-centric reads are eventually consistent
+**To do:** verify the target platform's behavior before sharding; a
+Snowflake-style or UUIDv7 id is the fallback.
 
-**Severity S3, accepted by design.** `bookings_by_requester` is maintained
-through a transactional outbox rather than a cross-shard write, so "all my
-appointments" can lag the authoritative `bookings` rows by seconds.
+## API-14 — A very large tenant cannot be split
 
-The alternative — a distributed transaction on every booking — would put
-two-phase commit on the hot write path to serve a secondary read. Not worth it.
-
-**What to do:** make the staleness explicit in the API when that endpoint is
-built (a `generated_at` field), read the authoritative row through
-`/resources/{id}/bookings/{id}` whenever correctness matters, and monitor relay
-lag. Never make a booking decision from this table.
+**S3, accepted.** Sharding by tenant puts a tenant on exactly one node. A single
+tenant approaching a node's capacity is a hotspot. Acceptable while tenants are
+many and bounded; a platform-wide pool modelled as one tenant would defeat the
+design (ADR-0008).
 
 ---
 
 ## How this list is maintained
 
-An entry is added whenever a review finds a property of the spec or the
-implementation that we are choosing not to fix now. Entries are closed by a
-commit that links back to the issue number, not by deletion — the history of
-what we knowingly accepted is the useful part.
-
-Issues that turn into design decisions graduate into an ADR; API-2's resolution
-is already partly recorded in [ADR-0008](../adr/0008-identifier-strategy.md),
-and API-1 needs an ADR of its own before implementation starts.
+An entry is added whenever a review finds something we are choosing not to fix
+now. Entries are closed by a commit that links back to the issue number, not by
+deletion; the history of what we knowingly accepted is the useful part.
