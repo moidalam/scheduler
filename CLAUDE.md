@@ -29,6 +29,11 @@ make corp-ca           # macOS: let the Docker build trust a TLS-inspecting prox
 
 ## Rules that matter
 
+- **Telemetry goes through `internal/observability` only.** Log with the context
+  you were given, so `request_id`, `tenant_id` and `trace_id` attach themselves.
+  Never log `metadata`, `meeting_url` or idempotency keys. Metric tags are bounded
+  values only (`error_code`, `result`, `sqlstate`): never ids. See
+  [ADR-0010](docs/adr/0010-telemetry-opentelemetry.md).
 - **Only `internal/db` knows the database.** Controllers depend on the `Store`
   interface and `internal/entity` types; no `pgx`, `dbgen`, transaction or SQLSTATE
   outside `internal/db` (tests and `cmd/seed` aside). Another database means a new

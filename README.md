@@ -95,6 +95,16 @@ The header is **not authenticated**, so this is routing, not isolation
   stated rules (four are on a Saturday, and one is 60 minutes). They are loaded
   as-is and reported ([PRD R-3](docs/product/prd.md)).
 
+## Observability
+
+`make dev` also starts a Grafana stack. Open <http://localhost:3000>:
+
+- **Explore → Loki:** `{service_name="scheduler"}`. Filter by `request_id`, `trace_id` or `op`.
+- **Explore → Tempo:** search by `trace_id`, or open one from a log line. It shows the request's spans from the handler down through the controller to each database call.
+- **Explore → Prometheus:** `operation_total` and `operation_duration_milliseconds_bucket`, by `layer`, `op` and `result`.
+
+Dashboards and alert rules are not included yet. The stack keeps data only while its container runs.
+
 ## Layout
 
 ```

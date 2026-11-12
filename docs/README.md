@@ -22,6 +22,7 @@
 | [0007](adr/0007-go-service-layout.md) | Go layout and libraries, following payments-api |
 | [0008](adr/0008-tenant-sharding-and-identifiers.md) | Tenant-scoped, shard-ready model with bigint identity ids |
 | [0009](adr/0009-tenant-context-via-header.md) | Tenant read from the `X-Tenant-ID` header |
+| [0010](adr/0010-telemetry-opentelemetry.md) | OpenTelemetry for logs, metrics and traces, shipped to a local Grafana stack |
 
 New ADRs start from [the template](adr/0000-template.md) and are numbered in
 sequence. An accepted ADR is not edited to change its decision; a new one

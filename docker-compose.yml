@@ -29,15 +29,34 @@ services:
       # Leave this unset anywhere real, so a missing header fails closed.
       DEFAULT_TENANT_ID: "1"
       LOG_LEVEL: info
+      # Logs, metrics and traces go to the observability stack below.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
     depends_on:
       postgres:
         condition: service_healthy
+      otel-lgtm:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
       interval: 3s
       timeout: 3s
       retries: 15
       start_period: 5s
+
+  # Observability for local use: one image bundling an OpenTelemetry collector,
+  # Prometheus (metrics), Loki (logs), Tempo (traces) and Grafana (the UI).
+  # Open http://localhost:3000.
+  # Data lives in the container: `docker compose down` discards it.
+  otel-lgtm:
+    image: grafana/otel-lgtm:0.40.0
+    ports:
+      # Bound to localhost only: the UI is not reachable from the network.
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    environment:
+      # Read-only anonymous access for viewing dashboards. Log in as admin/admin
+      # (Grafana's default, local only) to edit.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
 
   # One-shot: loads data/appointments.seed.json into tenant 1, then exits.
   # Idempotent, so `docker compose up` can be run repeatedly.
