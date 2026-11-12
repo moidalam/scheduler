@@ -1,0 +1,16 @@
+# Loads the Scheduler dashboards from the repo into the local Grafana. The
+# otel-lgtm image reads every provider file in its provisioning directory;
+# docker-compose.yml mounts this file there.
+apiVersion: 1
+
+providers:
+  - name: Scheduler
+    type: file
+    # Re-read the folder every 10 seconds, so a regenerated dashboard shows up
+    # without restarting Grafana.
+    updateIntervalSeconds: 10
+    # The UI may save copies, but the repo file stays the source of truth.
+    allowUiUpdates: false
+    options:
+      path: /otel-lgtm/scheduler-dashboards
+      foldersFromFilesStructure: false

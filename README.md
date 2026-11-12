@@ -103,7 +103,19 @@ The header is **not authenticated**, so this is routing, not isolation
 - **Explore → Tempo:** search by `trace_id`, or open one from a log line. It shows the request's spans from the handler down through the controller to each database call.
 - **Explore → Prometheus:** `operation_total` and `operation_duration_milliseconds_bucket`, by `layer`, `op` and `result`.
 
-Dashboards and alert rules are not included yet. The stack keeps data only while its container runs.
+**Dashboard:** <http://localhost:3000/d/scheduler-overview> has these sections:
+
+- **Overview** and **SLO**: availability against a 99.5% target, the error budget left, and burn rate (1h and 6h).
+- **Traffic**, **Latency** (p50/p95/p99) and **Errors**, with 4xx rejections classified by error code and 5xx failures by layer and Postgres class.
+- **Booking funnel**: availability views, booking attempts, conflicts, rule violations and confirmed bookings.
+- **Layers** and **Time breakdown**: the same requests seen at each layer, and a cake view of where the time goes.
+- **Tenant drill-down**: pick a tenant with the Tenant box. It reads from Loki, since tenant is a log field and not a metric label.
+
+Deployments show as purple lines on every panel. Record one with `make deploy-marker`.
+
+Regenerate the dashboard with `make dashboards` after editing `deploy/grafana/build_dashboard.py`.
+
+The stack keeps data only while its container runs.
 
 ## Layout
 

@@ -1,6 +1,7 @@
 .PHONY: help corp-ca setup generate sqlc-generate build test test-integration vet dev dev-down dev-logs seed psql clean dashboards alerts bvt deploy-marker
 
 GO := go
+PYTHON ?= python3
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-18s %s\n", $$1, $$2}'
@@ -56,6 +57,18 @@ test-integration: .env ## Integration tests against real Postgres, in Docker
 
 dev: .env ## Start Postgres, the API and the seed loader
 	docker compose up --build
+
+# Records a deployment as a vertical marker on every Grafana panel. Grafana's
+# local login is admin/admin (see docker-compose.yml); change it if you change that.
+GRAFANA_URL ?= http://localhost:3000
+VERSION ?= $(shell git rev-parse --short HEAD)
+deploy-marker: ## Mark a deployment on the dashboards (VERSION defaults to the current commit)
+	curl -fsS -u admin:admin -H 'Content-Type: application/json' -X POST \
+		-d '{"text":"Deployed $(VERSION)","tags":["deploy"]}' $(GRAFANA_URL)/api/annotations
+	@echo
+
+dashboards: ## Regenerate the Grafana dashboards from deploy/grafana/build_dashboard.py
+	$(PYTHON) deploy/grafana/build_dashboard.py
 
 bvt: .env ## Build-verification tests against the running stack (starts it detached first)
 	docker compose up -d --build
