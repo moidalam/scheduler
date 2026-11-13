@@ -152,7 +152,7 @@ To avoid a breaking change later, v1 already carries:
   current rules. Records 5, 7, 8, 9 and 10 are all on Saturday 2019-01-26, outside
   the Monday–Friday window, and record 9 is also sixty minutes where the rule is
   thirty. Assumption taken: history is immutable and loaded verbatim; policy
-  applies to new bookings only. **Open:** confirm with the product owner that
+  applies to new bookings only (R-3). **Open:** confirm with the product owner that
   this is preferred over normalising or dropping them, or whether Saturday is
   meant to be bookable.
 - **R-4 — Identity.** This service owns a `requesters` table, so a booking's

@@ -84,13 +84,13 @@ func NewRouter(d RouterDeps) http.Handler {
 	return otelhttp.NewHandler(r, "scheduler")
 }
 
-// getAPIName returns a normalized API endpoint name from the request.
-// Examples: "get_availability", "post_bookings", "list_bookings"
+// getAPIName returns a normalized API endpoint name from the request for rate limit scoping.
+// Examples: "get_resources_availability", "post_bookings", "get_resources_bookings"
 func getAPIName(r *http.Request) string {
 	method := strings.ToLower(r.Method)
 	path := r.URL.Path
 
-	// Normalize path: /v1/tenants/{tenant_id}/resources/{resource_id}/availability -> resources_availability
+	// Normalize path: /v1/resources/{resource_id}/availability -> get_resources_availability
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) >= 2 {
 		for _, part := range parts {

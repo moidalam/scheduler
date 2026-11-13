@@ -12,7 +12,8 @@ import (
 	"github.com/moidalam/scheduler/internal/handlers"
 )
 
-// Middleware returns an HTTP middleware that enforces rate limits.
+// Middleware returns an HTTP handler that enforces per-tenant global and
+// per-API rate limits, recording all checks as metrics.
 // Must be applied after the TenantMiddleware so the tenant_id is in the context.
 func Middleware(limiter *Limiter) func(http.Handler) http.Handler {
 	meter := otel.Meter("scheduler/ratelimit")
@@ -51,13 +52,13 @@ func Middleware(limiter *Limiter) func(http.Handler) http.Handler {
 	}
 }
 
-// getAPIName returns a normalized API endpoint name from the request.
-// Examples: "list_availability", "create_booking", "list_bookings"
+// getAPIName returns a normalized API endpoint name from the request for rate limit scoping.
+// Examples: "get_resources_availability", "post_bookings", "get_resources_bookings"
 func getAPIName(r *http.Request) string {
 	method := strings.ToLower(r.Method)
 	path := r.URL.Path
 
-	// Normalize path: /v1/tenants/{tenant_id}/resources/{resource_id}/availability -> resources_availability
+	// Normalize path: /v1/resources/{resource_id}/availability -> get_resources_availability
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) >= 2 {
 		// Skip version and tenants/{id} prefixes
