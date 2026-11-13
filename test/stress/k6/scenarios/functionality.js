@@ -1,5 +1,5 @@
 import { group } from 'k6';
-import { scenarios } from '../config.js';
+import { scenarios, thresholds } from '../config.js';
 import * as helpers from '../utils/helpers.js';
 import * as assertions from '../utils/assertions.js';
 
@@ -7,6 +7,7 @@ export const options = {
   scenarios: {
     functional: scenarios.functional,
   },
+  thresholds: thresholds.functional,
 };
 
 export default function () {

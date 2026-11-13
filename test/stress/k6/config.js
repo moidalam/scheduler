@@ -5,7 +5,7 @@ export const TEST_RESOURCE_ID = 100;
 export const TEST_REQUESTER_ID = 200;
 export const TEST_SERVICE_ID = 1;
 
-// Load profiles
+// Load profiles (stages only, thresholds are separate)
 export const loadProfiles = {
   functional: {
     stages: [
@@ -13,10 +13,6 @@ export const loadProfiles = {
       { duration: '5m', target: 200 },    // Hold for 5 min
       { duration: '30s', target: 0 },     // Ramp down
     ],
-    thresholds: {
-      'http_req_duration': ['p(95)<500', 'p(99)<1000'],
-      'http_req_failed': ['rate<0.01'], // <1% errors
-    },
   },
   chaos: {
     stages: [
@@ -29,9 +25,6 @@ export const loadProfiles = {
       { duration: '2m', target: 1000 },   // Hold at max
       { duration: '30s', target: 0 },     // Ramp down
     ],
-    thresholds: {
-      'http_req_failed{status_code:5xx}': ['rate<0.001'], // <0.1% 500s
-    },
   },
   spike: {
     stages: [
@@ -43,21 +36,29 @@ export const loadProfiles = {
   },
 };
 
-// Scenario config
+// Scenario config with executor
 export const scenarios = {
   functional: {
-    name: 'Functionality Tests',
     executor: 'ramping-vus',
     ...loadProfiles.functional,
   },
   chaos: {
-    name: 'Chaos/Monkey Tests',
     executor: 'ramping-vus',
     ...loadProfiles.chaos,
   },
   spike: {
-    name: 'Spike Test',
     executor: 'ramping-vus',
     ...loadProfiles.spike,
+  },
+};
+
+// Thresholds by scenario
+export const thresholds = {
+  functional: {
+    'http_req_duration': ['p(95)<500', 'p(99)<1000'],
+    'http_req_failed': ['rate<0.01'],
+  },
+  chaos: {
+    'http_req_failed{status_code:5xx}': ['rate<0.001'],
   },
 };
