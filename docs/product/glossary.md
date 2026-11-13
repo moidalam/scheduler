@@ -1,9 +1,8 @@
 # Domain Glossary
 
-The original brief is phrased in trainer/client terms. This system is modelled
-domain-agnostically so the same core serves trainers, clinicians, advisors,
-support agents, equipment, or rooms. The mapping is fixed here once and used
-everywhere else.
+This service is built domain-agnostically to serve trainers, clinicians, advisors,
+support agents, equipment, or rooms. The mapping from the original brief's
+trainer/client terms is defined once below and reused throughout.
 
 | Generic term | Trainer-domain example | Definition |
 |---|---|---|

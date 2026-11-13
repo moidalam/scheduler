@@ -81,9 +81,8 @@ The header is **not authenticated**, so this is routing, not isolation
 ## Things worth knowing before you read the code
 
 - **Overlap is prevented by Postgres**, with an exclusion constraint, not by
-  application logic. Racing bookings of one slot yield one `201` and the rest `409`,
-  and there is a test that fires 25 at once
-  ([ADR-0004](docs/adr/0004-overlap-prevention.md)).
+  application logic. Racing bookings of one slot yield one `201` and exactly 24 `409` responses
+  (tested with 25 concurrent requests—see [ADR-0004](docs/adr/0004-overlap-prevention.md)).
 - **Availability is computed on read**, never stored
   ([ADR-0005](docs/adr/0005-slots-computed-not-stored.md)).
 - **Business hours are evaluated in the resource's timezone**, so DST is handled
