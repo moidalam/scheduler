@@ -40,8 +40,8 @@ The first implementation relied on the constraint alone, and a test with 25
 simultaneous bookings of one slot showed a flaw. The invariant held (exactly one
 booking was created) but the other 24 requests did not fail cleanly. Postgres
 aborted them with **deadlock detected** (`40P01`), each after a one-second
-detection delay. Concurrent inserts into an exclusion constraint each wait on the
-other's uncommitted row, which, unlike a unique index, can deadlock.
+detection delay. Concurrent inserts on an exclusion constraint wait on each other and can
+deadlock—unlike a unique index.
 
 So the booking transaction first takes a transaction-scoped advisory lock keyed on
 `(tenant_id, resource_id)`, re-checks for overlap while holding it, then inserts.

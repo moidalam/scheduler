@@ -9,7 +9,7 @@
 shifts by an hour twice a year; on those days a naive fixed-offset
 implementation either opens an hour early, closes an hour late, or generates a
 slot that does not exist. Meanwhile, the overlap invariant is a statement about
-absolute instants. Conflating the two is the classic source of scheduling bugs.
+absolute instants. Mixing the two creates scheduling bugs.
 
 ## Decision
 
