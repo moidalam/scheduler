@@ -35,7 +35,7 @@ func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
 // Close releases the connection pool.
 func (s *Store) Close() { s.pool.Close() }
 
-// GetTenant returns the tenant, or entity.ErrNotFound.
+// GetTenant retrieves a tenant by ID or returns entity.ErrNotFound if missing.
 func (s *Store) GetTenant(ctx context.Context, id int64) (entity.Tenant, error) {
 	t, err := s.q.GetTenant(ctx, id)
 	if err != nil {

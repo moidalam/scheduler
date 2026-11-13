@@ -23,7 +23,8 @@ type Limiter struct {
 	configLoader ConfigLoader
 }
 
-// ConfigLoader loads rate limit configurations from storage.
+// ConfigLoader loads rate limit configs from the Store, enabling dynamic
+// threshold updates per tenant and API scope without restarting.
 type ConfigLoader interface {
 	LoadRateLimitConfig(ctx context.Context, tenantID int64, scope string) (requestsPerSecond int, err error)
 }
@@ -71,7 +72,8 @@ func (l *Limiter) AllowRequest(ctx context.Context, tenantID int64, scope string
 	return true, remaining, nil
 }
 
-// checkLimit checks a single rate limit scope (global or API endpoint).
+// checkLimit evaluates one scope (global or API endpoint) against its
+// configured requests-per-second limit using Lua for atomicity.
 func (l *Limiter) checkLimit(ctx context.Context, tenantID int64, scope string) (allowed bool, remaining int, err error) {
 	rps, err := l.getConfig(ctx, tenantID, scope)
 	if err != nil {
@@ -97,7 +99,8 @@ func (l *Limiter) checkLimit(ctx context.Context, tenantID int64, scope string) 
 	return allowed, remaining, nil
 }
 
-// evaluateLuaScript runs the sliding window Lua script atomically in Redis.
+// evaluateLuaScript atomically registers a new request in the sliding window
+// if the per-second limit allows, pruning requests outside the 1-second window.
 func (l *Limiter) evaluateLuaScript(ctx context.Context, key string, now, windowStart int64, maxRequests int) (allowed bool, count int, err error) {
 	script := redis.NewScript(`
 		local key = KEYS[1]
@@ -132,7 +135,8 @@ func (l *Limiter) evaluateLuaScript(ctx context.Context, key string, now, window
 	return allowed, count, nil
 }
 
-// getConfig fetches rate limit config, using cache with TTL.
+// getConfig loads from ConfigLoader and caches results for 30s;
+// applies defaults (1000 req/sec global, 100 req/sec per API) if unconfigured.
 func (l *Limiter) getConfig(ctx context.Context, tenantID int64, scope string) (int, error) {
 	l.mu.RLock()
 	if time.Now().Before(l.cacheExpiry) {
@@ -168,7 +172,7 @@ func (l *Limiter) getConfig(ctx context.Context, tenantID int64, scope string) (
 	return rps, nil
 }
 
-// ClearCache clears the config cache (useful for testing or admin operations).
+// ClearCache empties the config cache and expiry time (for testing only).
 func (l *Limiter) ClearCache() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
