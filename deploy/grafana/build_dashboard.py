@@ -225,6 +225,17 @@ place(pie("Edge time by operation",
           # "unrouted" is excluded: those are probes that never reached an operation.
           [q(f'sum by (op) (increase(operation_duration_milliseconds_sum{{layer="handler",op!="unrouted",{OPS}}}[$__range]))', "{{op}}", True)]), 8, 9)
 
+# ------------------------------------------------------------- rate limit --
+heading("Rate Limiting: rejections under load")
+place(ts("Rate limit rejections by scope", "429 responses per second: global vs API limits",
+         [q('sum by (scope) (rate(operation_total{layer="handler",status_family="429",' + OPS + '}' + RATE + '))', "{{scope}}")],
+         "reqps"), 12, 8)
+place(stat("Rate limit rejection rate", "Share of requests rejected (429)",
+           '(sum(increase(operation_total{layer="handler",status_family="429",' + OPS + '}' + RANGE + ') or vector(0)) / sum(increase(operation_total{layer="handler",' + OPS + '}' + RANGE + ')) * 100',
+           "percent", [{"color": "green", "value": None}, {"color": "orange", "value": 0.1}, {"color": "red", "value": 1}], decimals=2), 12, 8)
+place(table("Rate limit rejections in range", "429 responses by operation.",
+            'sum by (op) (increase(operation_total{layer="handler",status_family="429",' + OPS + '}' + RANGE + '))'), 24, 7)
+
 # ----------------------------------------------------------------- tenant --
 heading("Tenant drill-down (from logs): pick a tenant above")
 # Tenant is a log field, not a metric label: a tenant label would multiply the

@@ -1961,11 +1961,195 @@
     {
       "id": 40,
       "type": "row",
-      "title": "Tenant drill-down (from logs): pick a tenant above",
+      "title": "Rate Limiting: rejections under load",
       "collapsed": false,
       "gridPos": {
         "x": 0,
         "y": 88,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Rate limit rejections by scope",
+      "description": "429 responses per second: global vs API limits",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (scope) (rate(operation_total{layer=\"handler\",status_family=\"429\",op=~\"$op\"}[$__rate_interval]))",
+          "legendFormat": "{{scope}}",
+          "refId": "A",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "stacking": {
+              "mode": "none"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 41,
+      "gridPos": {
+        "x": 0,
+        "y": 89,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Rate limit rejection rate",
+      "description": "Share of requests rejected (429)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(operation_total{layer=\"handler\",status_family=\"429\",op=~\"$op\"}[$__range]) or vector(0)) / sum(increase(operation_total{layer=\"handler\",op=~\"$op\"}[$__range])) * 100",
+          "legendFormat": "",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "id": 42,
+      "gridPos": {
+        "x": 12,
+        "y": 89,
+        "w": 12,
+        "h": 8
+      }
+    },
+    {
+      "type": "table",
+      "title": "Rate limit rejections in range",
+      "description": "429 responses by operation.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (op) (increase(operation_total{layer=\"handler\",status_family=\"429\",op=~\"$op\"}[$__range]))",
+          "legendFormat": "",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Value",
+            "desc": true
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            }
+          }
+        }
+      ],
+      "id": 43,
+      "gridPos": {
+        "x": 0,
+        "y": 97,
+        "w": 24,
+        "h": 7
+      }
+    },
+    {
+      "id": 44,
+      "type": "row",
+      "title": "Tenant drill-down (from logs): pick a tenant above",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 104,
         "w": 24,
         "h": 1
       },
@@ -2014,10 +2198,10 @@
           "sort": "desc"
         }
       },
-      "id": 41,
+      "id": 45,
       "gridPos": {
         "x": 0,
-        "y": 89,
+        "y": 105,
         "w": 12,
         "h": 8
       }
@@ -2065,10 +2249,10 @@
           "sort": "desc"
         }
       },
-      "id": 42,
+      "id": 46,
       "gridPos": {
         "x": 12,
-        "y": 89,
+        "y": 105,
         "w": 12,
         "h": 8
       }
@@ -2098,10 +2282,10 @@
         "sortOrder": "Descending",
         "enableLogDetails": true
       },
-      "id": 43,
+      "id": 47,
       "gridPos": {
         "x": 0,
-        "y": 97,
+        "y": 113,
         "w": 24,
         "h": 10
       }
