@@ -34,6 +34,10 @@ type Store interface {
 	// and entity.ErrDuplicateIdempotencyKey if the key was already used. How it
 	// serialises concurrent writers is its own concern (ADR-0004).
 	CreateBooking(ctx context.Context, tenantID int64, nb entity.NewBooking) (entity.Booking, error)
+
+	// GetRateLimitConfig returns the rate limit configuration for a tenant and scope.
+	// Returns 0 if not found (caller should use defaults).
+	GetRateLimitConfig(ctx context.Context, tenantID int64, scope string) (requestsPerSecond int, err error)
 }
 
 // Availability is the result of an availability query.

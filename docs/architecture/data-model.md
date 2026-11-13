@@ -24,6 +24,99 @@ tenants 1──* services
                   (each booking → one resource, one requester, one service)
 ```
 
+### Entity-Relationship Diagram
+
+```mermaid
+erDiagram
+  TENANTS ||--o{ SERVICES : "1..many"
+  TENANTS ||--o{ RESOURCES : "1..many"
+  TENANTS ||--o{ REQUESTERS : "1..many"
+  TENANTS ||--o{ BOOKINGS : "1..many"
+  TENANTS ||--o{ AVAILABILITY_RULES : "1..many"
+  TENANTS ||--o{ BOOKING_EVENTS : "1..many"
+  RESOURCES ||--o{ AVAILABILITY_RULES : "1..many"
+  RESOURCES ||--o{ BOOKINGS : "1..many"
+  REQUESTERS ||--o{ BOOKINGS : "1..many"
+  SERVICES ||--o{ BOOKINGS : "1..many"
+  SERVICES }o--|| RESOURCES : "default"
+  BOOKINGS ||--o{ BOOKING_EVENTS : "1..many"
+  
+  TENANTS {
+    bigint id PK
+    text name
+    text status
+    timestamptz created_at
+  }
+  
+  SERVICES {
+    bigint tenant_id FK
+    bigint id
+    text name
+    int duration_minutes
+    int granularity_minutes
+    int min_notice_minutes
+    int max_horizon_days
+  }
+  
+  RESOURCES {
+    bigint tenant_id FK
+    bigint id
+    text type
+    text display_name
+    text timezone
+    bigint default_service_id FK
+    boolean active
+    jsonb metadata
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  
+  REQUESTERS {
+    bigint tenant_id FK
+    bigint id
+    text external_ref
+    text display_name
+    timestamptz created_at
+  }
+  
+  AVAILABILITY_RULES {
+    bigint tenant_id FK
+    bigint id
+    bigint resource_id FK
+    smallint weekday
+    time starts_at_local
+    time ends_at_local
+    date effective_from
+    date effective_to
+  }
+  
+  BOOKINGS {
+    bigint tenant_id FK
+    bigint id
+    bigint resource_id FK
+    bigint requester_id FK
+    bigint service_id FK
+    timestamptz starts_at
+    timestamptz ends_at
+    text status
+    text meeting_url
+    text idempotency_key
+    jsonb metadata
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  
+  BOOKING_EVENTS {
+    bigint tenant_id FK
+    bigint id
+    bigint booking_id FK
+    text actor
+    text action
+    timestamptz at
+    jsonb payload
+  }
+```
+
 | Table | Class | Primary key |
 |---|---|---|
 | `tenants` | reference (replicated when sharded) | `(id)` |

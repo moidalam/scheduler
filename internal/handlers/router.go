@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,6 +30,8 @@ type RouterDeps struct {
 	Log           *slog.Logger
 	// Metrics records one operation per request at the edge.
 	Metrics *observability.OpTracker
+	// RateLimiter enforces per-tenant and per-API rate limits.
+	RateLimiter interface{ AllowRequest(context.Context, int64, string) (bool, int, error) }
 }
 
 // NewRouter builds the HTTP handler: health at /healthz, the generated API
@@ -54,6 +58,21 @@ func NewRouter(d RouterDeps) http.Handler {
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(TenantMiddleware(d.Tenants, d.DefaultTenant, d.Log))
+		if d.RateLimiter != nil {
+			r.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+					ctx := req.Context()
+					tenantID := TenantFrom(ctx)
+					apiName := getAPIName(req)
+					allowed, _, _ := d.RateLimiter.AllowRequest(ctx, tenantID, apiName)
+					if !allowed {
+						http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+						return
+					}
+					next.ServeHTTP(w, req)
+				})
+			})
+		}
 		api.HandlerWithOptions(strict, api.ChiServerOptions{
 			BaseRouter:       r,
 			ErrorHandlerFunc: requestErrorHandler,
@@ -63,4 +82,22 @@ func NewRouter(d RouterDeps) http.Handler {
 	// layer below it log and measure inside that one trace. It also accepts an
 	// incoming traceparent header from the caller.
 	return otelhttp.NewHandler(r, "scheduler")
+}
+
+// getAPIName returns a normalized API endpoint name from the request.
+// Examples: "get_availability", "post_bookings", "list_bookings"
+func getAPIName(r *http.Request) string {
+	method := strings.ToLower(r.Method)
+	path := r.URL.Path
+
+	// Normalize path: /v1/tenants/{tenant_id}/resources/{resource_id}/availability -> resources_availability
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) >= 2 {
+		for _, part := range parts {
+			if part != "v1" && part != "tenants" && !strings.HasPrefix(part, "{") && !strings.HasSuffix(part, "}") {
+				return fmt.Sprintf("%s_%s", method, part)
+			}
+		}
+	}
+	return "global"
 }

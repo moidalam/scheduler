@@ -99,3 +99,13 @@ type BookingFilter struct {
 	AfterID       *int64
 	Limit         int
 }
+
+// RateLimitConfig is the per-tenant rate limit configuration.
+// Scope is "global" for tenant-wide limits or an API endpoint name (e.g., "create_booking").
+type RateLimitConfig struct {
+	TenantID          int64
+	Scope             string
+	RequestsPerSecond int
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}

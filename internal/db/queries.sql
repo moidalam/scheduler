@@ -91,3 +91,9 @@ VALUES ($1, $2, $3, $4, $5);
 SELECT pg_advisory_xact_lock(
     hashtextextended(sqlc.arg(tenant_id)::bigint::text || ':' || sqlc.arg(resource_id)::bigint::text, 0)
 );
+
+-- Rate limit configuration queries.
+-- name: GetRateLimitConfig :one
+SELECT tenant_id, scope, requests_per_second, created_at, updated_at
+FROM scheduler.rate_limits
+WHERE tenant_id = $1 AND scope = $2;

@@ -142,3 +142,9 @@ func (o *ObservedStore) CreateBooking(ctx context.Context, tenantID int64, nb en
 		return o.next.CreateBooking(ctx, tenantID, nb)
 	})
 }
+
+func (o *ObservedStore) GetRateLimitConfig(ctx context.Context, tenantID int64, scope string) (int, error) {
+	return observe(o, ctx, "GetRateLimitConfig", func(ctx context.Context) (int, error) {
+		return o.next.GetRateLimitConfig(ctx, tenantID, scope)
+	})
+}

@@ -74,6 +74,31 @@ func (q *Queries) GetBookingByIdempotencyKey(ctx context.Context, arg GetBooking
 	return i, err
 }
 
+const getRateLimitConfig = `-- name: GetRateLimitConfig :one
+SELECT tenant_id, scope, requests_per_second, created_at, updated_at
+FROM scheduler.rate_limits
+WHERE tenant_id = $1 AND scope = $2
+`
+
+type GetRateLimitConfigParams struct {
+	TenantID int64
+	Scope    string
+}
+
+// Rate limit configuration queries.
+func (q *Queries) GetRateLimitConfig(ctx context.Context, arg GetRateLimitConfigParams) (SchedulerRateLimit, error) {
+	row := q.db.QueryRow(ctx, getRateLimitConfig, arg.TenantID, arg.Scope)
+	var i SchedulerRateLimit
+	err := row.Scan(
+		&i.TenantID,
+		&i.Scope,
+		&i.RequestsPerSecond,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getResource = `-- name: GetResource :one
 SELECT tenant_id, id, type, display_name, timezone, default_service_id, active, metadata, created_at, updated_at
 FROM scheduler.resources

@@ -47,6 +47,16 @@ type SchedulerBookingEvent struct {
 	Payload   []byte
 }
 
+// Per-tenant rate limit configuration: scope is "global" or an API endpoint name (e.g., "create_booking")
+type SchedulerRateLimit struct {
+	TenantID int64
+	Scope    string
+	// Maximum requests allowed per second for this scope
+	RequestsPerSecond int32
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
 type SchedulerRequester struct {
 	TenantID    int64
 	ID          int64

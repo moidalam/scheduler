@@ -236,3 +236,19 @@ func bookingFrom(b dbgen.SchedulerBooking) (entity.Booking, error) {
 		CreatedAt: b.CreatedAt, UpdatedAt: b.UpdatedAt,
 	}, nil
 }
+
+func (s *Store) GetRateLimitConfig(ctx context.Context, tenantID int64, scope string) (int, error) {
+	cfg, err := s.q.GetRateLimitConfig(ctx, dbgen.GetRateLimitConfigParams{TenantID: tenantID, Scope: scope})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil // Not found, caller uses defaults
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get rate limit config: %w", err)
+	}
+	return int(cfg.RequestsPerSecond), nil
+}
+
+// LoadRateLimitConfig implements ratelimit.ConfigLoader.
+func (s *Store) LoadRateLimitConfig(ctx context.Context, tenantID int64, scope string) (int, error) {
+	return s.GetRateLimitConfig(ctx, tenantID, scope)
+}

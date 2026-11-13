@@ -19,6 +19,8 @@ type Config struct {
 	Port string
 	// DatabaseURL is the Postgres connection string. Env: DATABASE_URL. Required.
 	DatabaseURL string
+	// RedisURL is the Redis connection string. Env: REDIS_URL. Default: "redis://localhost:6379".
+	RedisURL string
 	// DefaultTenantID is used when a request has no X-Tenant-ID header
 	// (ADR-0009). Zero means unset: a missing header is then a 400.
 	// Env: DEFAULT_TENANT_ID. Default: 0.
@@ -42,11 +44,13 @@ func Load() (*Config, error) {
 	v.SetDefault("port", "8080")
 	v.SetDefault("default_tenant_id", 0)
 	v.SetDefault("log_level", "info")
+	v.SetDefault("redis_url", "redis://localhost:6379")
 
 	cfg := &Config{
 		Env:             v.GetString("app_env"),
 		Port:            v.GetString("port"),
 		DatabaseURL:     v.GetString("database_url"),
+		RedisURL:        v.GetString("redis_url"),
 		DefaultTenantID: v.GetInt64("default_tenant_id"),
 		LogLevel:        strings.ToLower(v.GetString("log_level")),
 		OTelEndpoint:    v.GetString("otel_exporter_otlp_endpoint"),

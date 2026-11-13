@@ -11,11 +11,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/moidalam/scheduler/internal/config"
 	"github.com/moidalam/scheduler/internal/controllers"
 	"github.com/moidalam/scheduler/internal/db"
 	"github.com/moidalam/scheduler/internal/handlers"
 	"github.com/moidalam/scheduler/internal/observability"
+	"github.com/moidalam/scheduler/internal/ratelimit"
 )
 
 // Stamped by the Dockerfile via -ldflags "-X main.version=<commit sha>".
@@ -74,11 +77,20 @@ func run() error {
 		return err
 	}
 
+	// Set up rate limiter with Redis
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: cfg.RedisURL,
+	})
+	defer redisClient.Close()
+
+	rateLimiter := ratelimit.New(redisClient, store, logger)
+
 	srv := &http.Server{
 		Addr: ":" + cfg.Port,
 		Handler: handlers.NewRouter(handlers.RouterDeps{
 			Handlers: handlers.New(ctl), Tenants: store, DB: store,
 			DefaultTenant: cfg.DefaultTenantID, Log: logger, Metrics: edge,
+			RateLimiter: rateLimiter,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

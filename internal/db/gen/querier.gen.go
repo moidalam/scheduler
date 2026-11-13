@@ -11,6 +11,8 @@ import (
 type Querier interface {
 	GetBooking(ctx context.Context, arg GetBookingParams) (SchedulerBooking, error)
 	GetBookingByIdempotencyKey(ctx context.Context, arg GetBookingByIdempotencyKeyParams) (SchedulerBooking, error)
+	// Rate limit configuration queries.
+	GetRateLimitConfig(ctx context.Context, arg GetRateLimitConfigParams) (SchedulerRateLimit, error)
 	GetResource(ctx context.Context, arg GetResourceParams) (SchedulerResource, error)
 	GetService(ctx context.Context, arg GetServiceParams) (SchedulerService, error)
 	// Every query is scoped by tenant_id (ADR-0008). None reads across tenants.
