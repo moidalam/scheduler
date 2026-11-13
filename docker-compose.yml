@@ -1,4 +1,14 @@
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
   postgres:
     image: postgres:17
     environment:
@@ -25,6 +35,7 @@ services:
       APP_ENV: local
       PORT: "8080"
       DATABASE_URL: postgres://scheduler:${POSTGRES_PASSWORD}@postgres:5432/scheduler?sslmode=disable
+      REDIS_URL: redis://redis:6379
       # Local convenience (ADR-0009): lets plain curl work without X-Tenant-ID.
       # Leave this unset anywhere real, so a missing header fails closed.
       DEFAULT_TENANT_ID: "1"
@@ -32,6 +43,8 @@ services:
       # Logs, metrics and traces go to the observability stack below.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
     depends_on:
+      redis:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       otel-lgtm:
@@ -77,6 +90,7 @@ services:
     command: ["./seed", "-file", "/app/data/appointments.seed.json"]
     environment:
       DATABASE_URL: postgres://scheduler:${POSTGRES_PASSWORD}@postgres:5432/scheduler?sslmode=disable
+      REDIS_URL: redis://redis:6379
     depends_on:
       app:
         condition: service_healthy
@@ -91,7 +105,10 @@ services:
       target: test
     environment:
       TEST_DATABASE_URL: postgres://scheduler:${POSTGRES_PASSWORD}@postgres:5432/postgres?sslmode=disable
+      REDIS_URL: redis://redis:6379
     depends_on:
+      redis:
+        condition: service_healthy
       postgres:
         condition: service_healthy
 

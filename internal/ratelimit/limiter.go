@@ -147,13 +147,15 @@ func (l *Limiter) getConfig(ctx context.Context, tenantID int64, scope string) (
 	// Load from storage
 	rps, err := l.configLoader.LoadRateLimitConfig(ctx, tenantID, scope)
 	if err != nil {
-		// Return a default if config not found
-		if rps == 0 {
-			if scope == "global" {
-				rps = 1000 // default: 1000 req/sec per tenant
-			} else {
-				rps = 100 // default: 100 req/sec per API per tenant
-			}
+		return 0, fmt.Errorf("load rate limit config: %w", err)
+	}
+
+	// Apply defaults if not configured
+	if rps == 0 {
+		if scope == "global" {
+			rps = 1000 // default: 1000 req/sec per tenant
+		} else {
+			rps = 100 // default: 100 req/sec per API per tenant
 		}
 	}
 

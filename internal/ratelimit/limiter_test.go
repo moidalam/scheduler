@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"os"
 	"testing"
 	"time"
 
@@ -30,7 +32,22 @@ func TestLimiterSlidingWindow(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	client := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+
+	// Parse Redis URL from environment, defaulting to localhost for local testing
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379"
+	}
+
+	u, err := url.Parse(redisURL)
+	require.NoError(t, err)
+
+	addr := u.Host
+	if u.Port() == "" {
+		addr = u.Host + ":6379"
+	}
+
+	client := redis.NewClient(&redis.Options{Addr: addr})
 	defer client.Close()
 
 	// Flush redis
@@ -47,6 +64,7 @@ func TestLimiterSlidingWindow(t *testing.T) {
 
 	t.Run("allows requests within limit", func(t *testing.T) {
 		client.FlushDB(ctx)
+		limiter.ClearCache()
 
 		// First 3 requests should be allowed (global limit is 3)
 		for i := 0; i < 3; i++ {
@@ -63,6 +81,7 @@ func TestLimiterSlidingWindow(t *testing.T) {
 
 	t.Run("respects per-api limits", func(t *testing.T) {
 		client.FlushDB(ctx)
+		limiter.ClearCache()
 
 		// get_bookings has a limit of 2 per second
 		for i := 0; i < 2; i++ {
@@ -79,6 +98,7 @@ func TestLimiterSlidingWindow(t *testing.T) {
 
 	t.Run("rate limits are tenant-scoped", func(t *testing.T) {
 		client.FlushDB(ctx)
+		limiter.ClearCache()
 
 		// Tenant 1 should be limited
 		for i := 0; i < 3; i++ {
@@ -99,6 +119,7 @@ func TestLimiterSlidingWindow(t *testing.T) {
 
 	t.Run("resets after window", func(t *testing.T) {
 		client.FlushDB(ctx)
+		limiter.ClearCache()
 
 		// Use up the limit
 		for i := 0; i < 3; i++ {
@@ -126,6 +147,7 @@ func TestLimiterSlidingWindow(t *testing.T) {
 		loader.tenantLimits["1:custom"] = 1
 
 		client.FlushDB(ctx)
+		limiter.ClearCache()
 
 		// First request allowed
 		allowed, _, err := limiter.AllowRequest(ctx, 1, "custom")
