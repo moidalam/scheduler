@@ -1,4 +1,4 @@
-.PHONY: help corp-ca setup generate sqlc-generate build test test-integration vet dev dev-down dev-logs seed psql clean dashboards alerts bvt deploy-marker
+.PHONY: help corp-ca setup generate sqlc-generate build test test-integration vet dev dev-down dev-logs seed psql clean dashboards alerts bvt deploy-marker stress-functional stress-chaos stress-contention stress-full
 
 GO := go
 PYTHON ?= python3
@@ -77,6 +77,21 @@ bvt: .env ## Build-verification tests against the running stack (starts it detac
 	docker compose up -d --build
 	until curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; do sleep 2; done
 	$(GO) test -tags bvt -count=1 -v ./test/bvt/
+
+# --- Stress testing (k6) --------------------------------------------------------
+# Requires: k6 installed (https://k6.io/docs/getting-started/installation/)
+#           make dev running in another terminal
+stress-functional: ## Run k6 functionality tests
+	$(MAKE) -C test/stress/k6 functional
+
+stress-chaos: ## Run k6 chaos/monkey tests
+	$(MAKE) -C test/stress/k6 chaos
+
+stress-contention: ## Run k6 concurrent contention test (25 VUs)
+	$(MAKE) -C test/stress/k6 contention
+
+stress-full: ## Run full k6 stress test suite
+	$(MAKE) -C test/stress/k6 full
 
 dev-down: ## Stop everything (keeps data; add -v to docker compose down to wipe it)
 	docker compose down --remove-orphans
