@@ -63,11 +63,22 @@ a retried request return the original booking rather than a conflict.
 | Option | Why not |
 |---|---|
 | Check-then-insert in the application | Racy. Fails under exactly the load that matters. |
-| `SERIALIZABLE` isolation | Costs retries on all traffic to protect one write path. |
+| `SERIALIZABLE` isolation | Serializes all bookings table writes (even for different resources), not just overlapping ones. Performance cost: unrelated bookings queue needlessly. High p99 latency under concurrent load. Still requires materializing slots to work. |
+| `SERIALIZABLE` + direct status check | **Correctness: YES.** In SERIALIZABLE, `UPDATE slots SET status='booked' WHERE slot_id=X AND status='available'` works: only one transaction succeeds. **Performance: NO.** Serializes all bookings traffic (same cost as above). Still requires materializing slots (generator daemon, garbage collection). |
 | A lock *instead of* the constraint (`SELECT ... FOR UPDATE`, advisory lock) | Correctness would depend on every writer, present and future, remembering to take it. We use an advisory lock *in addition*, only to avoid deadlocks. |
 | Optimistic locking (version on bookings) | Slots are computed, not stored (ADR-0005), so there's no row to version. Booking validation spans multiple tables (requester, service, availability rules, existing bookings); multi-condition checks cannot be atomically compare-and-swapped. Implementing it would require materializing slots, reintroducing the garbage collection problem. High retry rate under concurrent load. |
 | Distributed lock (Redis) | A new component and failure mode to solve what the database already solves. |
 | Pre-materialised slot rows | Needs a generator and garbage collection forever. |
+
+### Why the exclusion constraint wins
+
+| Approach | Correctness | Performance | Retries | Slot Management | Garbage Collection |
+|---|---|---|---|---|---|
+| **Exclusion constraint** | ✅ Perfect | ✅ Good (surgical) | ❌ None needed | ❌ None (computed) | ❌ None |
+| SERIALIZABLE (all bookings) | ✅ Perfect | ❌ Poor (serializes all) | ✅ Built-in | ✅ None (computed) | ❌ None |
+| SERIALIZABLE + status check | ✅ Perfect | ❌ Poor (serializes all) | ✅ Built-in | ✅ Required | ✅ Forever |
+
+The exclusion constraint is surgical: it prevents overlaps for *one resource only*, letting bookings for different resources run in parallel. SERIALIZABLE would serialize all bookings, even non-conflicting ones, making it overkill for this write path.
 
 ## Consequences
 
