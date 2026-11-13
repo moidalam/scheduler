@@ -4,8 +4,10 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -78,8 +80,16 @@ func run() error {
 	}
 
 	// Set up rate limiter with Redis
+	u, err := url.Parse(cfg.RedisURL)
+	if err != nil {
+		return fmt.Errorf("parse redis url: %w", err)
+	}
+	redisAddr := u.Host
+	if u.Port() == "" {
+		redisAddr = u.Host + ":6379"
+	}
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: cfg.RedisURL,
+		Addr: redisAddr,
 	})
 	defer redisClient.Close()
 
