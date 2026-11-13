@@ -8,8 +8,8 @@ import * as assertions from '../utils/assertions.js';
 // Expected: exactly 1 success (201), 24 conflicts (409), zero 500s
 
 export const options = {
-  vus: 25,
-  duration: '30s',
+  vus: 100,
+  duration: '5m',
   thresholds: {
     'http_req_duration': ['p(95)<500'],
     'http_req_failed{status_code:5xx}': ['rate<0.001'],

@@ -9,9 +9,9 @@ export const TEST_SERVICE_ID = 1;
 export const loadProfiles = {
   functional: {
     stages: [
-      { duration: '30s', target: 50 },   // Ramp to 50 VUs
-      { duration: '1m', target: 50 },    // Hold for 1 min
-      { duration: '10s', target: 0 },    // Ramp down
+      { duration: '1m', target: 200 },    // Ramp to 200 VUs
+      { duration: '5m', target: 200 },    // Hold for 5 min
+      { duration: '30s', target: 0 },     // Ramp down
     ],
     thresholds: {
       'http_req_duration': ['p(95)<500', 'p(99)<1000'],
@@ -20,12 +20,14 @@ export const loadProfiles = {
   },
   chaos: {
     stages: [
-      { duration: '20s', target: 100 },
-      { duration: '10s', target: 300 },  // Spike
-      { duration: '20s', target: 100 },
-      { duration: '10s', target: 500 },  // Another spike
-      { duration: '20s', target: 100 },
-      { duration: '10s', target: 0 },
+      { duration: '30s', target: 200 },
+      { duration: '30s', target: 500 },   // Ramp up
+      { duration: '2m', target: 500 },    // Hold
+      { duration: '30s', target: 800 },   // Spike 1
+      { duration: '1m', target: 500 },
+      { duration: '30s', target: 1000 },  // Spike 2 (big one)
+      { duration: '2m', target: 1000 },   // Hold at max
+      { duration: '30s', target: 0 },     // Ramp down
     ],
     thresholds: {
       'http_req_failed{status_code:5xx}': ['rate<0.001'], // <0.1% 500s
@@ -33,10 +35,10 @@ export const loadProfiles = {
   },
   spike: {
     stages: [
-      { duration: '10s', target: 50 },
-      { duration: '10s', target: 200 },  // Sudden spike
-      { duration: '10s', target: 50 },
-      { duration: '10s', target: 0 },
+      { duration: '30s', target: 100 },
+      { duration: '30s', target: 500 },   // Sudden spike
+      { duration: '1m', target: 500 },    // Hold spike
+      { duration: '30s', target: 0 },     // Ramp down
     ],
   },
 };
